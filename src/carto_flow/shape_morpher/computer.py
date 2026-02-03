@@ -1,17 +1,17 @@
 """
-===========================================================================
-Object-oriented interface for cartogram generation
-===========================================================================
+Object-oriented interface for cartogram generation.
 
 Stateful cartogram generation with refinement support.
 
-Main Components
----------------
-- MorphComputer: Stateful cartogram generation class
-- RefinementRun: Record of a single refinement run
-
-Example
+Classes
 -------
+MorphComputer
+    Stateful cartogram generation class.
+RefinementRun
+    Record of a single refinement run.
+
+Examples
+--------
 >>> from carto_flow.shape_morpher import MorphComputer, MorphOptions
 >>>
 >>> computer = MorphComputer(gdf, 'population', options=MorphOptions.preset_fast())

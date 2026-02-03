@@ -1,24 +1,26 @@
 """
-===========================================================================
-Visualization utilities for cartogram results
-===========================================================================
+Visualization utilities for cartogram results.
 
 Plotting and animation utilities for morphing results and algorithm analysis.
 
-Main Components
----------------
-- plot_result: Plot morphed geometries
-- plot_comparison: Side-by-side comparison of original vs morphed
-- plot_convergence: Plot error metrics over iterations
-- plot_density_field: Visualize density field as heatmap
-- plot_velocity_field: Visualize velocity field as quiver plot
+Functions
+---------
+plot_result
+    Plot morphed geometries.
+plot_comparison
+    Side-by-side comparison of original vs morphed.
+plot_convergence
+    Plot error metrics over iterations.
+plot_density_field
+    Visualize density field as heatmap.
+plot_velocity_field
+    Visualize velocity field as quiver plot.
 
-Example
--------
+Examples
+--------
 >>> from carto_flow.shape_morpher import morph_gdf, MorphOptions
 >>> from carto_flow.shape_morpher.visualization import plot_comparison, plot_convergence
->>>
->>> result = morph_gdf(gdf, 'population', options=MorphOptions.preset_fast())
+>>> result = morph_gdf(gdf, "population", options=MorphOptions.preset_fast())
 >>> plot_comparison(gdf, result)
 >>> plot_convergence(result.history)
 """

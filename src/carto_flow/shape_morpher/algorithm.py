@@ -1,17 +1,15 @@
 """
-===========================================================================
-Core morphing algorithm for cartogram generation
-===========================================================================
+Core morphing algorithm for cartogram generation.
 
 Low-level cartogram algorithm working directly with shapely geometries.
 
-Main Components
----------------
-- morph_geometries: Core morphing function for shapely geometries
-- Coordinate format detection and conversion utilities
+Functions
+---------
+morph_geometries
+    Core morphing function for shapely geometries.
 
-Example
--------
+Examples
+--------
 >>> from carto_flow.shape_morpher import morph_geometries, MorphOptions
 >>> from shapely.geometry import Polygon
 >>>
@@ -496,7 +494,7 @@ def morph_geometries(
         # 2^|log2_error| - 1 gives the multiplicative deviation as a fraction
         max_error_pct = (2**max_error - 1) * 100
         mean_error_pct = (2**mean_error - 1) * 100
-        pbar.set_postfix_str(f"max={max_error_pct:.1f}%, mean={mean_error_pct:.1f}% - {status}")
+        pbar.set_postfix_str(f"max={max_error_pct:.1f}%, mean={mean_error_pct:.1f}% - {status.value}")
 
         if converged or stalled:
             pbar.update()

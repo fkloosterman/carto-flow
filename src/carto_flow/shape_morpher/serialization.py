@@ -1,19 +1,21 @@
 """
-===========================================================================
-Serialization utilities for cartogram results
-===========================================================================
+Serialization utilities for cartogram results.
 
 Export, save, and load utilities for morphing results and state.
 
-Main Components
----------------
-- export_result: Export morphed geometries to GeoJSON, GeoPackage, or Shapefile
-- save_state: Serialize MorphComputer state to file
-- load_state: Load MorphComputer state from file
-- export_history: Export convergence history to CSV or JSON
+Functions
+---------
+export_result
+    Export morphed geometries to GeoJSON, GeoPackage, or Shapefile.
+save_state
+    Serialize MorphComputer state to file.
+load_state
+    Load MorphComputer state from file.
+export_history
+    Export convergence history to CSV or JSON.
 
-Example
--------
+Examples
+--------
 >>> from carto_flow.shape_morpher import morph_gdf, MorphOptions
 >>> from carto_flow.shape_morpher.serialization import export_result, export_history
 >>>

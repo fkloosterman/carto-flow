@@ -1,18 +1,22 @@
 """
-===========================================================================
-Comparison utilities for cartogram results
-===========================================================================
+Comparison utilities for cartogram results.
 
 Utilities for comparing original and morphed geometries.
 
-Main Components
----------------
-- ComparisonResult: Dataclass containing comparison metrics
-- compare_results: Compare two morphing results statistically
-- compute_displacement_vectors: Compute centroid displacement vectors
-
-Example
+Classes
 -------
+ComparisonResult
+    Dataclass containing comparison metrics.
+
+Functions
+---------
+compare_results
+    Compare two morphing results statistically.
+compute_displacement_vectors
+    Compute centroid displacement vectors.
+
+Examples
+--------
 >>> from carto_flow.shape_morpher import morph_gdf
 >>> from carto_flow.shape_morpher.comparison import compare_results
 >>>

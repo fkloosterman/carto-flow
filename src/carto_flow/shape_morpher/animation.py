@@ -1,21 +1,24 @@
 """
-===========================================================================
-Animation utilities for cartogram results
-===========================================================================
+Animation utilities for cartogram results.
 
 Animation functions for visualizing morphing results, including geometry
 transitions, density field evolution, and velocity field dynamics.
 
-Main Components
----------------
-- animate_morph_history: Animate through algorithm snapshots
-- animate_geometry_keyframes: Animate between arbitrary geometry states
-- animate_density_field: Animate density field evolution
-- animate_velocity_field: Animate velocity field evolution
-- save_animation: Save animations to various formats
+Functions
+---------
+animate_morph_history
+    Animate through algorithm snapshots.
+animate_geometry_keyframes
+    Animate between arbitrary geometry states.
+animate_density_field
+    Animate density field evolution.
+animate_velocity_field
+    Animate velocity field evolution.
+save_animation
+    Save animations to various formats.
 
-Example
--------
+Examples
+--------
 >>> from carto_flow.shape_morpher import morph_gdf, MorphOptions
 >>> from carto_flow.shape_morpher.animation import animate_morph_history, save_animation
 >>>

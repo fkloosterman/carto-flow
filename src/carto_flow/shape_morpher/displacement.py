@@ -1,37 +1,30 @@
 """
-================================================================================
-Displacement computation utilities for flow-based cartography
-================================================================================
+Displacement computation utilities for flow-based cartography.
 
-This module provides functions for applying displacement fields to geometric objects,
-including polygon displacement with bilinear interpolation and displacement field
-upsampling. These utilities are essential for the iterative deformation process
-in flow-based cartogram algorithms.
+This module provides functions for applying displacement fields to geometric
+objects, including polygon displacement with bilinear interpolation and
+displacement field upsampling. These utilities are essential for the iterative
+deformation process in flow-based cartogram algorithms.
 
-Main components
----------------
-- displace_coords: Basic coordinate displacement with bilinear interpolation
-- displace_coords_numba: Optimized Numba-compiled version for uniform grids
-- apply_displacement_to_polygons_vectorized: Vectorized polygon displacement
-- upsample_displacement: Upsample displacement fields to higher resolution
+Functions
+---------
+displace_coords
+    Basic coordinate displacement with bilinear interpolation.
+displace_coords_numba
+    Optimized Numba-compiled version for uniform grids.
+apply_displacement_to_polygons_vectorized
+    Vectorized polygon displacement.
+upsample_displacement
+    Upsample displacement fields to higher resolution.
 
-Example
--------
-    >>> from carto_flow.displacement import displace_coords, apply_displacement_to_polygons_vectorized
-    >>> from carto_flow.grid import Grid
-    >>>
-    >>> # Set up displacement computation
-    >>> grid = Grid.from_bounds((0, 0, 100, 80), size=100)
-    >>> vx, vy = velocity_field  # Your velocity field here
-    >>>
-    >>> # Displace polygon coordinates
-    >>> coords = np.array([[10, 20], [30, 40], [50, 60]])
-    >>> displaced_coords = displace_coords(coords, grid, vx, vy, dt=0.1)
-    >>>
-    >>> # Apply displacement to entire polygons
-    >>> displaced_polygons = apply_displacement_to_polygons_vectorized(
-    ...     polygons, vx, vy, grid, dt=0.1
-    ... )
+Examples
+--------
+>>> from carto_flow.shape_morpher.displacement import displace_coords
+>>> from carto_flow.shape_morpher.grid import Grid
+>>> import numpy as np
+>>> grid = Grid.from_bounds((0, 0, 100, 80), size=100)
+>>> coords = np.array([[10, 20], [30, 40], [50, 60]])
+>>> displaced_coords = displace_coords(coords, grid, vx, vy, dt=0.1)
 """
 
 from __future__ import annotations

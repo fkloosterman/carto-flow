@@ -16,8 +16,8 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 
-from .shrink import shrink
-from .split import split
+from .shrinking import shrink
+from .splitting import split
 
 if TYPE_CHECKING:
     from shapely.geometry.base import BaseGeometry

@@ -1,17 +1,17 @@
 """
-===========================================================================
-High-level API for cartogram generation
-===========================================================================
+High-level API for cartogram generation.
 
 User-facing functions for creating cartograms from GeoDataFrames.
 
-Main Components
----------------
-- morph_gdf: GeoDataFrame-based interface for cartogram generation
-- multiresolution_morph: Multi-resolution morphing with progressive refinement
+Functions
+---------
+morph_gdf
+    GeoDataFrame-based interface for cartogram generation.
+multiresolution_morph
+    Multi-resolution morphing with progressive refinement.
 
-Example
--------
+Examples
+--------
 >>> from carto_flow.shape_morpher import morph_gdf, MorphOptions
 >>>
 >>> result = morph_gdf(gdf, 'population', options=MorphOptions.preset_fast())

@@ -1,18 +1,19 @@
 """
-===========================================================================
-Configuration options and status enums for morphing algorithms
-===========================================================================
+Configuration options and status enums for morphing algorithms.
 
 Configuration classes for controlling cartogram generation behavior.
 
-Main Components
----------------
-- MorphStatus: Enum for morphing operation status values
-- MorphOptions: Dataclass with comprehensive validation
-- MorphOptionsError: Base exception for validation errors
-
-Example
+Classes
 -------
+MorphStatus
+    Enum for morphing operation status values.
+MorphOptions
+    Dataclass with comprehensive validation.
+MorphOptionsError
+    Base exception for validation errors.
+
+Examples
+--------
 >>> from carto_flow.shape_morpher import MorphOptions
 >>>
 >>> # Use preset configurations

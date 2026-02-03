@@ -1,32 +1,29 @@
 """
-========================================================================================
-Anisotropy tensor utilities for velocity field modulation in flow-based cartography
-========================================================================================
+Anisotropy tensor utilities for velocity field modulation.
 
 This module provides functions for applying and constructing anisotropy tensors,
 which are used to modulate velocity fields in cartogram algorithms. Anisotropy
 tensors allow for direction-dependent scaling and rotation of velocity vectors,
 enabling more sophisticated flow field control.
 
-Main components
----------------
-- apply_anisotropy_tensor: Apply anisotropy tensor to velocity field components
-- build_axis_aligned_tensor: Construct axis-aligned anisotropy field with optional rotation
+Functions
+---------
+apply_anisotropy_tensor
+    Apply anisotropy tensor to velocity field components.
+build_axis_aligned_tensor
+    Construct axis-aligned anisotropy field with optional rotation.
 
-Example
--------
-    >>> from carto_flow.anisotropy import apply_anisotropy_tensor, build_axis_aligned_tensor
-    >>> import numpy as np
-    >>>
-    >>> # Create velocity field
-    >>> vx = np.ones((10, 10)) * 0.1
-    >>> vy = np.zeros((10, 10))
-    >>>
-    >>> # Build anisotropy tensor (elongated in x-direction)
-    >>> Axx, Axy, Ayx, Ayy = build_axis_aligned_tensor(10, 10, Dx=2.0, Dy=0.5)
-    >>>
-    >>> # Apply anisotropy
-    >>> vx_new, vy_new = apply_anisotropy_tensor(vx, vy, Axx, Axy, Ayx, Ayy)
+Examples
+--------
+>>> from carto_flow.shape_morpher.anisotropy import (
+...     apply_anisotropy_tensor,
+...     build_axis_aligned_tensor,
+... )
+>>> import numpy as np
+>>> vx = np.ones((10, 10)) * 0.1
+>>> vy = np.zeros((10, 10))
+>>> Axx, Axy, Ayx, Ayy = build_axis_aligned_tensor(10, 10, Dx=2.0, Dy=0.5)
+>>> vx_new, vy_new = apply_anisotropy_tensor(vx, vy, Axx, Axy, Ayx, Ayy)
 """
 
 import numpy as np

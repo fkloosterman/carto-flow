@@ -1,6 +1,5 @@
 """
-History management system for iterative algorithms
-==================================================
+History management system for iterative algorithms.
 
 This module provides a flexible and extensible system for tracking algorithm
 state across iterations. It supports any iterative algorithm through the
@@ -8,37 +7,40 @@ BaseSnapshot interface, making it reusable across different domains. The
 system provides both access to all data for a single snapshot (by iteration),
 and access to all snapshots for a single variable (by variable name).
 
-Key components
---------------
-- `BaseSnapshot`: Abstract base class for algorithm state snapshots
-- `CartogramSnapshot`: Snapshot class for cartogram algorithm statistics
-- `CartogramInternalsSnapshot`: Snapshot class for cartogram internal state
-- `History`: Container class for managing collections of snapshots
-
-Creating Custom Snapshots
--------------------------
-To create a custom snapshot class, inherit from BaseSnapshot and add your
-algorithm-specific attributes. The `iteration` attribute can be omitted,
-as it is inherited from `BaseSnapshot`.
-
-    >>> from carto_flow.history import BaseSnapshot
-    >>> from dataclasses import dataclass
-    >>> import numpy as np
-    >>>
-    >>> @dataclass
-    ... class CustomSnapshot(BaseSnapshot):
-    ...     iteration: int
-    ...     loss: Optional[float] = None
-    ...     accuracy: Optional[float] = None
-    ...     weights: Optional[np.ndarray] = None
-
-Example
+Classes
 -------
-    >>> from carto_flow.history import History, CartogramSnapshot
-    >>> history = History()
-    >>> snapshot = CartogramSnapshot(iteration=0, mean_error=0.1)
-    >>> history.add_snapshot(snapshot)
-    >>> errors = history.get_variable_history('mean_error')
+BaseSnapshot
+    Abstract base class for algorithm state snapshots.
+CartogramSnapshot
+    Snapshot class for cartogram algorithm statistics.
+CartogramInternalsSnapshot
+    Snapshot class for cartogram internal state.
+History
+    Container class for managing collections of snapshots.
+
+Notes
+-----
+To create a custom snapshot class, inherit from BaseSnapshot and add your
+algorithm-specific attributes:
+
+>>> from carto_flow.shape_morpher.history import BaseSnapshot
+>>> from dataclasses import dataclass
+>>> import numpy as np
+>>>
+>>> @dataclass
+... class CustomSnapshot(BaseSnapshot):
+...     iteration: int
+...     loss: float = None
+...     accuracy: float = None
+...     weights: np.ndarray = None
+
+Examples
+--------
+>>> from carto_flow.shape_morpher.history import History, CartogramSnapshot
+>>> history = History()
+>>> snapshot = CartogramSnapshot(iteration=0, mean_error=0.1)
+>>> history.add_snapshot(snapshot)
+>>> errors = history.get_variable_history('mean_error')
 """
 
 from abc import ABC

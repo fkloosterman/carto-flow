@@ -1,35 +1,19 @@
 """
-================================================================================
-Grid Construction and Management Utilities for Flow-Based Cartography
-================================================================================
+Grid construction and management utilities for flow-based cartography.
 
 This module provides functions for creating and managing spatial grids used
 in flow-based cartogram algorithms. It includes utilities for constructing
 regular grids, multi-resolution grids, and grid information containers.
 
-Main Components
---------------
-Grid : Structured grid information container with lazy computation
-    Class providing flexible grid construction with multiple class methods
-    and lazy computation with caching of coordinate arrays for optimal performance.
+Classes
+-------
+Grid
+    Structured grid information container with lazy computation and caching.
 
-build_multilevel_grids : Multi-resolution grid generator
-    Creates dyadically scaled grids for multi-resolution cartogram algorithms.
-
-Examples
---------
-Basic grid construction:
-
->>> from carto_flow.grid import Grid, build_multilevel_grids
->>> grid = Grid.from_bounds((0, 0, 100, 80), size=200)
->>> print(f"Grid shape: {grid.shape}")
-Grid shape: (100, 200)
-
-Multi-resolution grid construction:
-
->>> grids = build_multilevel_grids((0, 0, 100, 80), 256, n_levels=3)
->>> print(f"Number of resolution levels: {len(grids)}")
-Number of resolution levels: 3
+Functions
+---------
+build_multilevel_grids
+    Create dyadically scaled grids for multi-resolution cartogram algorithms.
 
 Notes
 -----
@@ -37,6 +21,17 @@ All grid functions return Grid objects that provide both array-based
 and property-based access to grid coordinates and metadata. The grids are
 designed to work seamlessly with FFT-based algorithms and maintain proper
 aspect ratios for cartographic applications.
+
+Examples
+--------
+>>> from carto_flow.shape_morpher.grid import Grid, build_multilevel_grids
+>>> grid = Grid.from_bounds((0, 0, 100, 80), size=200)
+>>> print(f"Grid shape: {grid.shape}")
+Grid shape: (100, 200)
+
+>>> grids = build_multilevel_grids((0, 0, 100, 80), 256, n_levels=3)
+>>> print(f"Number of resolution levels: {len(grids)}")
+Number of resolution levels: 3
 """
 
 import math

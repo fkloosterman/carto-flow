@@ -1,18 +1,22 @@
 """
-===========================================================================
-Quality metrics and validation for cartogram results
-===========================================================================
+Quality metrics and validation for cartogram results.
 
 Validation utilities to assess cartogram quality and detect issues.
 
-Main Components
----------------
-- QualityReport: Dataclass containing validation results
-- validate_result: Comprehensive validation of morphing result
-- check_topology: Detect self-intersections and invalid geometries
-
-Example
+Classes
 -------
+QualityReport
+    Dataclass containing validation results.
+
+Functions
+---------
+validate_result
+    Comprehensive validation of morphing result.
+check_topology
+    Detect self-intersections and invalid geometries.
+
+Examples
+--------
 >>> from carto_flow.shape_morpher import morph_gdf, MorphOptions
 >>> from carto_flow.shape_morpher.metrics import validate_result
 >>>

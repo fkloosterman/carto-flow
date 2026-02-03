@@ -1,27 +1,22 @@
 """
-===========================================================================
-Density field computation utilities for cartographic applications
-===========================================================================
+Density field computation utilities for cartographic applications.
 
-This module provides functions for computing density fields from geospatial data,
-which are essential for flow-based cartography algorithms. The main functionality
-includes rasterizing polygon geometries onto regular grids to create density
-distributions that drive cartogram deformation processes.
+This module provides functions for computing density fields from geospatial
+data, which are essential for flow-based cartography algorithms. The main
+functionality includes rasterizing polygon geometries onto regular grids to
+create density distributions that drive cartogram deformation processes.
 
-Main components
----------------
-- compute_density_field: Core function for rasterizing polygon data to density grids
-- Support for various smoothing and background density options
-- Integration with shapely geometries and numpy arrays
+Functions
+---------
+compute_density_field
+    Core function for rasterizing polygon data to density grids.
 
-Example
--------
-    >>> from carto_flow.density import compute_density_field
-    >>> from carto_flow.grid import Grid
-    >>>
-    >>> # Set up grid and compute density
-    >>> grid = Grid.from_bounds((0, 0, 100, 80), size=100)
-    >>> density = compute_density_field(gdf, 'population', grid)
+Examples
+--------
+>>> from carto_flow.shape_morpher.density import compute_density_field
+>>> from carto_flow.shape_morpher.grid import Grid
+>>> grid = Grid.from_bounds((0, 0, 100, 80), size=100)
+>>> density = compute_density_field(gdf, "population", grid)
 """
 
 from typing import Any, Optional

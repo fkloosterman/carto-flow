@@ -1,34 +1,29 @@
 """
-===============================================================================
-Velocity field computation utilities for flow-based cartography
-===============================================================================
+Velocity field computation utilities for flow-based cartography.
 
-This module provides functions and classes for computing velocity fields from density
-distributions using FFT-based methods with anisotropic diffusion. These velocity fields
-drive the deformation process in flow-based cartogram algorithms.
+This module provides functions and classes for computing velocity fields from
+density distributions using FFT-based methods with anisotropic diffusion. These
+velocity fields drive the deformation process in flow-based cartogram algorithms.
 
-Main components
----------------
-- compute_velocity_anisotropic: Basic FFT-based velocity computation
-- compute_velocity_anisotropic_rfft: Optimized real FFT version with caching
-- VelocityComputerFFTW: High-performance FFTW-based velocity computer for repeated use
+Functions
+---------
+compute_velocity_anisotropic
+    Basic FFT-based velocity computation.
+compute_velocity_anisotropic_rfft
+    Optimized real FFT version with caching.
 
-Example
+Classes
 -------
-    >>> from carto_flow.velocity import compute_velocity_anisotropic, VelocityComputerFFTW
-    >>> from carto_flow.grid import Grid
-    >>> from carto_flow.density import compute_density_field
-    >>>
-    >>> # Set up computation
-    >>> grid = Grid.from_bounds((0, 0, 100, 80), size=100)
-    >>> density = compute_density_field(gdf, 'population', grid)
-    >>>
-    >>> # Compute velocity field
-    >>> vx, vy = compute_velocity_anisotropic(density, grid, Dx=1.0, Dy=1.0)
-    >>>
-    >>> # For repeated computations, use optimized version
-    >>> computer = VelocityComputerFFTW(grid, Dx=1.0, Dy=1.0)
-    >>> vx, vy = computer.compute(density)
+VelocityComputerFFTW
+    High-performance FFTW-based velocity computer for repeated use.
+
+Examples
+--------
+>>> from carto_flow.shape_morpher.velocity import VelocityComputerFFTW
+>>> from carto_flow.shape_morpher.grid import Grid
+>>> grid = Grid.from_bounds((0, 0, 100, 80), size=100)
+>>> computer = VelocityComputerFFTW(grid, Dx=1.0, Dy=1.0)
+>>> vx, vy = computer.compute(density)
 """
 
 from functools import lru_cache

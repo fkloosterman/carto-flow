@@ -1,16 +1,15 @@
 """
-===========================================================================
-Result container for morphing operations
-===========================================================================
+Result container for morphing operations.
 
 Data class for storing complete results from cartogram generation.
 
-Main Components
----------------
-- MorphResult: Complete results container with metadata
-
-Example
+Classes
 -------
+MorphResult
+    Complete results container with metadata.
+
+Examples
+--------
 >>> from carto_flow.shape_morpher import morph_gdf
 >>>
 >>> result = morph_gdf(gdf, 'population')

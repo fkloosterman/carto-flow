@@ -104,9 +104,9 @@ from .shape_morpher import (
 # Shape Splitting
 # ============================================================================
 from .shape_splitter import (
-    shrink_shape,
-    split_geometries,
-    split_shape,
+    partition_geometries,
+    shrink,
+    split,
 )
 
 # ============================================================================
@@ -115,30 +115,25 @@ from .shape_splitter import (
 
 __all__ = [
     "GeometryCoordinateInfo",
-    # Object-oriented interface
     "MorphComputer",
     "MorphOptions",
     "MorphResult",
     "MorphStatus",
-    # Shape morpher sub-modules
     "anisotropy",
     "compute_complex_polygon_areas_numba",
-    # Geometry optimization
     "compute_polygon_area_numba",
     "density",
     "displacement",
     "grid",
     "history",
-    # Core morphing functions
     "morph_gdf",
     "morph_geometries",
     "multiresolution_morph",
+    "partition_geometries",
     "reconstruct_geometries",
     "reconstruct_geometry",
-    # Shape splitting functions
-    "shrink_shape",
-    "split_geometries",
-    "split_shape",
+    "shrink",
+    "split",
     "unpack_geometries",
     "unpack_geometry",
     "velocity",
