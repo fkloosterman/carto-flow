@@ -18,8 +18,8 @@ export_history
 
 Examples
 --------
->>> from carto_flow.shape_morpher import morph_gdf, MorphOptions
->>> from carto_flow.shape_morpher.serialization import save_cartogram
+>>> from carto_flow.flow_cartogram import morph_gdf, MorphOptions
+>>> from carto_flow.flow_cartogram.serialization import save_cartogram
 >>>
 >>> cartogram = morph_gdf(gdf, 'population', options=MorphOptions.preset_fast())
 >>> save_cartogram(cartogram, 'cartogram.json')

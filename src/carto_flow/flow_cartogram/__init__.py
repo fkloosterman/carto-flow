@@ -79,7 +79,7 @@ Examples
 Create a population cartogram:
 
 >>> import geopandas as gpd
->>> from carto_flow.shape_morpher import morph_gdf, MorphOptions
+>>> from carto_flow.flow_cartogram import morph_gdf, MorphOptions
 >>> gdf = gpd.read_file("regions.geojson")
 >>> cartogram = morph_gdf(gdf, "population", options=MorphOptions.preset_balanced())
 >>> cartogram.plot()
@@ -88,7 +88,7 @@ Create a population cartogram:
 
 Multi-resolution morphing for better convergence:
 
->>> from carto_flow.shape_morpher import multiresolution_morph
+>>> from carto_flow.flow_cartogram import multiresolution_morph
 >>> cartogram = multiresolution_morph(gdf, "population", levels=3, resolution=512)
 
 Custom configuration:
@@ -105,7 +105,7 @@ Custom configuration:
 
 Using CartogramWorkflow for iterative refinement:
 
->>> from carto_flow.shape_morpher import CartogramWorkflow
+>>> from carto_flow.flow_cartogram import CartogramWorkflow
 >>> workflow = CartogramWorkflow(gdf, column="population")
 >>> workflow.morph()                    # Initial morphing
 >>> workflow.morph(mean_tol=0.01)       # Refine with tighter tolerance
@@ -114,12 +114,12 @@ Using CartogramWorkflow for iterative refinement:
 
 Accessing sub-modules:
 
->>> from carto_flow.shape_morpher import velocity, density, grid
->>> from carto_flow.shape_morpher.velocity import VelocityComputerFFTW
+>>> from carto_flow.flow_cartogram import velocity, density, grid
+>>> from carto_flow.flow_cartogram.velocity import VelocityComputerFFTW
 
 See Also
 --------
-[carto_flow.shape_splitter][] : Shape splitting and manipulation algorithms.
+[carto_flow.proportional_cartogram][] : Shape splitting and manipulation algorithms.
 """
 
 # Import sub-modules

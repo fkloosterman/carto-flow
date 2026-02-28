@@ -24,7 +24,7 @@ aspect ratios for cartographic applications.
 
 Examples
 --------
->>> from carto_flow.shape_morpher.grid import Grid, build_multilevel_grids
+>>> from carto_flow.flow_cartogram.grid import Grid, build_multilevel_grids
 >>> grid = Grid.from_bounds((0, 0, 100, 80), size=200)
 >>> print(f"Grid shape: {grid.shape}")
 Grid shape: (100, 200)

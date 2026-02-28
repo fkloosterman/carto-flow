@@ -13,8 +13,8 @@ compute_density_field
 
 Examples
 --------
->>> from carto_flow.shape_morpher.density import compute_density_field
->>> from carto_flow.shape_morpher.grid import Grid
+>>> from carto_flow.flow_cartogram.density import compute_density_field
+>>> from carto_flow.flow_cartogram.grid import Grid
 >>> grid = Grid.from_bounds((0, 0, 100, 80), size=100)
 >>> density = compute_density_field(gdf, "population", grid)
 """

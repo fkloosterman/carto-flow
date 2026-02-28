@@ -15,7 +15,7 @@ build_axis_aligned_tensor
 
 Examples
 --------
->>> from carto_flow.shape_morpher.anisotropy import (
+>>> from carto_flow.flow_cartogram.anisotropy import (
 ...     apply_anisotropy_tensor,
 ...     build_axis_aligned_tensor,
 ... )

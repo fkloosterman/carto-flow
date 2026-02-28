@@ -63,7 +63,7 @@ Examples
 
 See Also
 --------
-[carto_flow.shape_morpher.displacement][] : Coordinate displacement utilities.
+[carto_flow.flow_cartogram.displacement][] : Coordinate displacement utilities.
 """
 
 # Import and re-export main functions and classes from geometry module

@@ -1,5 +1,5 @@
 """
-Visualization utilities for shape_splitter results.
+Visualization utilities for proportional_cartogram results.
 
 Plotting utilities for visualizing partitioned geometries from shrink, split,
 and partition_geometries operations.
@@ -10,8 +10,8 @@ Main Components
 
 Example
 -------
->>> from carto_flow.shape_splitter import partition_geometries
->>> from carto_flow.shape_splitter.visualization import plot_partitions
+>>> from carto_flow.proportional_cartogram import partition_geometries
+>>> from carto_flow.proportional_cartogram.visualization import plot_partitions
 >>>
 >>> result = partition_geometries(gdf, ['agriculture', 'industry'], method='split')
 >>> plot_partitions(result)

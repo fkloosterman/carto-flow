@@ -215,7 +215,7 @@ def shrink(
     Single shrink (binary):
 
     >>> from shapely.geometry import Polygon
-    >>> from carto_flow.shape_splitter import shrink
+    >>> from carto_flow.proportional_cartogram import shrink
     >>>
     >>> square = Polygon([(0, 0), (10, 0), (10, 10), (0, 10)])
     >>> parts = shrink(square, 0.5)

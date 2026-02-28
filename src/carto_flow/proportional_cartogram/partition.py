@@ -212,7 +212,7 @@ def partition_geometries(
     Single column shrinking:
 
     >>> import geopandas as gpd
-    >>> from carto_flow.shape_splitter import partition_geometries
+    >>> from carto_flow.proportional_cartogram import partition_geometries
     >>>
     >>> result = partition_geometries(gdf, 'population', normalization='sum')
     >>> # Output columns: geometry_population, geometry_complement

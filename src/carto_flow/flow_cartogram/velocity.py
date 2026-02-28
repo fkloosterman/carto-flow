@@ -19,8 +19,8 @@ VelocityComputerFFTW
 
 Examples
 --------
->>> from carto_flow.shape_morpher.velocity import VelocityComputerFFTW
->>> from carto_flow.shape_morpher.grid import Grid
+>>> from carto_flow.flow_cartogram.velocity import VelocityComputerFFTW
+>>> from carto_flow.flow_cartogram.grid import Grid
 >>> grid = Grid.from_bounds((0, 0, 100, 80), size=100)
 >>> computer = VelocityComputerFFTW(grid, Dx=1.0, Dy=1.0)
 >>> vx, vy = computer.compute(density)

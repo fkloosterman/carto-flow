@@ -19,8 +19,8 @@ upsample_displacement
 
 Examples
 --------
->>> from carto_flow.shape_morpher.displacement import displace_coords
->>> from carto_flow.shape_morpher.grid import Grid
+>>> from carto_flow.flow_cartogram.displacement import displace_coords
+>>> from carto_flow.flow_cartogram.grid import Grid
 >>> import numpy as np
 >>> grid = Grid.from_bounds((0, 0, 100, 80), size=100)
 >>> coords = np.array([[10, 20], [30, 40], [50, 60]])

@@ -14,7 +14,7 @@ MorphOptionsError
 
 Examples
 --------
->>> from carto_flow.shape_morpher import MorphOptions
+>>> from carto_flow.flow_cartogram import MorphOptions
 >>>
 >>> # Use preset configurations
 >>> options = MorphOptions.preset_fast()

@@ -385,7 +385,7 @@ def split(
     Binary split (single fraction):
 
     >>> from shapely.geometry import Polygon
-    >>> from carto_flow.shape_splitter import split
+    >>> from carto_flow.proportional_cartogram import split
     >>>
     >>> rect = Polygon([(0, 0), (10, 0), (10, 5), (0, 5)])
     >>> parts = split(rect, 0.3, direction='vertical')

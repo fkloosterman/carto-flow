@@ -10,7 +10,7 @@ morph_geometries
 
 Examples
 --------
->>> from carto_flow.shape_morpher import morph_geometries, MorphOptions
+>>> from carto_flow.flow_cartogram import morph_geometries, MorphOptions
 >>> from shapely.geometry import Polygon
 >>>
 >>> polygons = [Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])]
@@ -251,7 +251,7 @@ def morph_geometries(
 
     Examples
     --------
-    >>> from carto_flow.shape_morpher import morph_geometries, MorphOptions
+    >>> from carto_flow.flow_cartogram import morph_geometries, MorphOptions
     >>> from shapely.geometry import Polygon
     >>>
     >>> # Simple morphing

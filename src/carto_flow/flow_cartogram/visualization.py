@@ -18,8 +18,8 @@ plot_velocity_field
 
 Examples
 --------
->>> from carto_flow.shape_morpher import morph_gdf, MorphOptions
->>> from carto_flow.shape_morpher.visualization import plot_comparison, plot_convergence
+>>> from carto_flow.flow_cartogram import morph_gdf, MorphOptions
+>>> from carto_flow.flow_cartogram.visualization import plot_comparison, plot_convergence
 >>> cartogram = morph_gdf(gdf, "population", options=MorphOptions.preset_fast())
 >>> plot_comparison(gdf, cartogram)
 >>> plot_convergence(cartogram.snapshots)
@@ -332,7 +332,7 @@ def plot_cartogram(
     Examples
     --------
     >>> from carto_flow import morph_gdf
-    >>> from carto_flow.shape_morpher.visualization import plot_cartogram
+    >>> from carto_flow.flow_cartogram.visualization import plot_cartogram
     >>> cartogram = morph_gdf(gdf, 'population')
     >>> plot_cartogram(cartogram)
     >>> plot_cartogram(cartogram, column='population', cmap='Blues')
@@ -405,7 +405,7 @@ def plot_comparison(
     Examples
     --------
     >>> from carto_flow import morph_gdf
-    >>> from carto_flow.shape_morpher.visualization import plot_comparison
+    >>> from carto_flow.flow_cartogram.visualization import plot_comparison
     >>> cartogram = morph_gdf(gdf, 'population')
     >>> # Compare original GeoDataFrame with cartogram result
     >>> plot_comparison(gdf, cartogram)
@@ -497,7 +497,7 @@ def plot_convergence(
     Examples
     --------
     >>> from carto_flow import morph_gdf
-    >>> from carto_flow.shape_morpher.visualization import plot_convergence
+    >>> from carto_flow.flow_cartogram.visualization import plot_convergence
     >>> cartogram = morph_gdf(gdf, 'population')
     >>> plot_convergence(cartogram)
     >>> plot_convergence(cartogram, show_recompute=True)
@@ -702,7 +702,7 @@ def plot_density_field(
     Examples
     --------
     >>> from carto_flow import morph_gdf, MorphOptions
-    >>> from carto_flow.shape_morpher.visualization import plot_density_field
+    >>> from carto_flow.flow_cartogram.visualization import plot_density_field
     >>> cartogram = morph_gdf(gdf, 'pop', options=MorphOptions(save_internals=True))
     >>> plot_density_field(cartogram)
 
@@ -901,7 +901,7 @@ def plot_velocity_field(
     Examples
     --------
     >>> from carto_flow import morph_gdf, MorphOptions
-    >>> from carto_flow.shape_morpher.visualization import plot_velocity_field
+    >>> from carto_flow.flow_cartogram.visualization import plot_velocity_field
     >>> cartogram = morph_gdf(gdf, 'pop', options=MorphOptions(save_internals=True))
     >>> plot_velocity_field(cartogram)
 

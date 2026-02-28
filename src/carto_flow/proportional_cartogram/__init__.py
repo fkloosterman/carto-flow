@@ -48,7 +48,7 @@ Examples
 --------
 Split a polygon into parts:
 
->>> from carto_flow.shape_splitter import split
+>>> from carto_flow.proportional_cartogram import split
 >>> from shapely.geometry import Polygon
 >>> polygon = Polygon([(0, 0), (10, 0), (10, 5), (0, 5)])
 >>> parts = split(polygon, fractions=0.6, direction="vertical")
@@ -57,14 +57,14 @@ Split a polygon into parts:
 
 Create concentric shells:
 
->>> from carto_flow.shape_splitter import shrink
+>>> from carto_flow.proportional_cartogram import shrink
 >>> shells = shrink(polygon, fractions=0.3)
 >>> len(shells)
 2
 
 Batch process a GeoDataFrame:
 
->>> from carto_flow.shape_splitter import partition_geometries
+>>> from carto_flow.proportional_cartogram import partition_geometries
 >>> result = partition_geometries(
 ...     gdf,
 ...     columns=["category_a", "category_b"],
@@ -84,8 +84,8 @@ Different shrinking modes:
 
 Combining with cartograms for multi-dimensional visualizations:
 
->>> from carto_flow.shape_morpher import morph_gdf, MorphOptions
->>> from carto_flow.shape_splitter import partition_geometries, plot_partitions
+>>> from carto_flow.flow_cartogram import morph_gdf, MorphOptions
+>>> from carto_flow.proportional_cartogram import partition_geometries, plot_partitions
 >>> result = morph_gdf(gdf, "total_gdp", options=MorphOptions.preset_balanced())
 >>> cartogram = result.geometries
 >>> partitioned = partition_geometries(
@@ -99,7 +99,7 @@ Combining with cartograms for multi-dimensional visualizations:
 
 See Also
 --------
-[carto_flow.shape_morpher][] : Cartogram generation algorithms.
+[carto_flow.flow_cartogram][] : Cartogram generation algorithms.
 """
 
 # Shape splitting functions

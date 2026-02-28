@@ -27,7 +27,7 @@ Notes
 To create a custom snapshot class, inherit from BaseSnapshot and add your
 algorithm-specific attributes:
 
->>> from carto_flow.shape_morpher.history import BaseSnapshot
+>>> from carto_flow.flow_cartogram.history import BaseSnapshot
 >>> from dataclasses import dataclass
 >>> import numpy as np
 >>>
@@ -40,8 +40,8 @@ algorithm-specific attributes:
 
 Examples
 --------
->>> from carto_flow.shape_morpher.history import History, CartogramSnapshot
->>> from carto_flow.shape_morpher.errors import MorphErrors
+>>> from carto_flow.flow_cartogram.history import History, CartogramSnapshot
+>>> from carto_flow.flow_cartogram.errors import MorphErrors
 >>> import numpy as np
 >>> history = History()
 >>> errors = MorphErrors(np.array([0.1]), 0.1, 0.1, np.array([7.2]), 7.2, 7.2)
@@ -330,8 +330,8 @@ class ConvergenceHistory:
 
     Examples
     --------
-    >>> from carto_flow.shape_morpher.history import ConvergenceHistory
-    >>> from carto_flow.shape_morpher.errors import MorphErrors
+    >>> from carto_flow.flow_cartogram.history import ConvergenceHistory
+    >>> from carto_flow.flow_cartogram.errors import MorphErrors
     >>> import numpy as np
     >>> convergence = ConvergenceHistory(capacity=100)
     >>> errors = MorphErrors(np.array([0.1]), 0.1, 0.2, np.array([7.2]), 7.2, 14.9)
@@ -517,7 +517,7 @@ class History:
 
     Examples
     --------
-    >>> from carto_flow.shape_morpher.history import History, CartogramSnapshot
+    >>> from carto_flow.flow_cartogram.history import History, CartogramSnapshot
     >>> history = History()
     >>> snapshot = CartogramSnapshot(iteration=0)
     >>> history.add_snapshot(snapshot)

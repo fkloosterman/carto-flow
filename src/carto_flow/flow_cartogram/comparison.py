@@ -17,8 +17,8 @@ compute_displacement_vectors
 
 Examples
 --------
->>> from carto_flow.shape_morpher import morph_gdf
->>> from carto_flow.shape_morpher.comparison import compare_results
+>>> from carto_flow.flow_cartogram import morph_gdf
+>>> from carto_flow.flow_cartogram.comparison import compare_results
 >>>
 >>> # Compare original to morphed
 >>> result = morph_gdf(gdf, 'population')

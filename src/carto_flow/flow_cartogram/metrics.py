@@ -17,8 +17,8 @@ check_topology
 
 Examples
 --------
->>> from carto_flow.shape_morpher import morph_gdf, MorphOptions
->>> from carto_flow.shape_morpher.metrics import validate_result
+>>> from carto_flow.flow_cartogram import morph_gdf, MorphOptions
+>>> from carto_flow.flow_cartogram.metrics import validate_result
 >>>
 >>> result = morph_gdf(gdf, 'population', options=MorphOptions.preset_fast())
 >>> report = validate_result(result)

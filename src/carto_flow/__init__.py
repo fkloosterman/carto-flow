@@ -67,26 +67,16 @@ Multi-resolution cartogram with refinement:
 """
 
 # ============================================================================
-# Shape Morphing (Cartogram Generation)
+# Flow-Based Cartogram Generation
 # ============================================================================
 
 # Core morphing functions
 # ============================================================================
 # Geometry Optimization
 # ============================================================================
-from .optimizations import (
-    GeometryCoordinateInfo,
-    compute_complex_polygon_areas_numba,
-    compute_polygon_area_numba,
-    reconstruct_geometries,
-    reconstruct_geometry,
-    unpack_geometries,
-    unpack_geometry,
-)
-
 # Object-oriented interface
-# Sub-modules from shape_morpher
-from .shape_morpher import (
+# Sub-modules from flow_cartogram
+from .flow_cartogram import (
     Cartogram,
     CartogramWorkflow,
     MorphOptions,
@@ -101,11 +91,20 @@ from .shape_morpher import (
     multiresolution_morph,
     velocity,
 )
+from .optimizations import (
+    GeometryCoordinateInfo,
+    compute_complex_polygon_areas_numba,
+    compute_polygon_area_numba,
+    reconstruct_geometries,
+    reconstruct_geometry,
+    unpack_geometries,
+    unpack_geometry,
+)
 
 # ============================================================================
-# Shape Splitting
+# Proportional Cartogram Partitioning
 # ============================================================================
-from .shape_splitter import (
+from .proportional_cartogram import (
     partition_geometries,
     shrink,
     split,

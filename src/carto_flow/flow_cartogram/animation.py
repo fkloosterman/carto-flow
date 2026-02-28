@@ -20,7 +20,7 @@ save_animation
 Examples
 --------
 >>> from carto_flow import CartogramWorkflow, MorphOptions
->>> from carto_flow.shape_morpher.animation import animate_morph_history, save_animation
+>>> from carto_flow.flow_cartogram.animation import animate_morph_history, save_animation
 >>>
 >>> workflow = CartogramWorkflow(gdf, 'population')
 >>> cartogram = workflow.morph(options=MorphOptions(save_history=True))
@@ -1022,7 +1022,7 @@ def animate_geometry_keyframes(
     ... )
 
     >>> # Linear over custom times
-    >>> from carto_flow.shape_morpher.animation import linear_over
+    >>> from carto_flow.flow_cartogram.animation import linear_over
     >>> anim = animate_geometry_keyframes(
     ...     keyframes=[gdf, result1, result2],
     ...     keyframe_times=[0.0, 0.3, 1.0],
