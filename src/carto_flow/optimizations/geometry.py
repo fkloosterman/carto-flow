@@ -1,40 +1,49 @@
 """
-Geometry optimization utilities for efficient polygon processing.
+High-performance geometry processing utilities.
 
-This module provides high-performance functions for polygon area computation,
-geometry unpacking/reconstruction, and coordinate manipulation using Numba JIT
-compilation and vectorized operations.
+This module provides Numba-optimized functions for polygon area computation,
+geometry unpacking/reconstruction, and coordinate manipulation. It enables
+efficient batch processing of geometries by separating coordinate storage
+from geometry objects.
 
-Key features:
-- Numba-optimized area computation for polygons with holes
-- Efficient geometry serialization/deserialization
-- Vectorized coordinate transformations
-- Parallel processing support for large datasets
+Classes
+-------
+GeometryCoordinateInfo
+    Container for flattened coordinates with reconstruction metadata.
 
-Main components:
-- compute_polygon_area_numba: Fast shoelace formula implementation
-- compute_complex_polygon_areas_numba: Parallel area computation for complex polygons
-- unpack_geometry: Convert shapely geometries to coordinate arrays
-- reconstruct_geometry: Rebuild shapely geometries from coordinates
-- GeometryCoordinateInfo: Efficient coordinate storage and processing
-- unpack_geometries: Batch geometry processing utilities
+Functions
+---------
+unpack_geometries
+    Convert list of geometries to flattened coordinate array.
+unpack_geometry
+    Convert single geometry to coordinates and metadata.
+reconstruct_geometries
+    Rebuild geometries from GeometryCoordinateInfo.
+reconstruct_geometry
+    Rebuild single geometry from coordinates and metadata.
+compute_polygon_area_numba
+    Fast shoelace formula for single polygon ring.
+compute_complex_polygon_areas_numba
+    Parallel area computation for polygons with holes.
 
-Example:
-    >>> from carto_flow.optimizations.geometry import unpack_geometries, GeometryCoordinateInfo
-    >>> from shapely.geometry import Polygon
-    >>>
-    >>> # Process multiple polygons efficiently
-    >>> polygons = [Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])]
-    >>> coord_info = unpack_geometries(polygons, precompute_ring_info=True)
-    >>>
-    >>> # Transform coordinates in-place
-    >>> coord_info.coords += displacement_vector
-    >>>
-    >>> # Compute areas efficiently
-    >>> areas = coord_info.compute_areas(use_parallel=True)
-    >>>
-    >>> # Reconstruct geometries only when needed
-    >>> final_polygons = reconstruct_geometries(coord_info)
+Examples
+--------
+>>> from carto_flow.optimizations import unpack_geometries, reconstruct_geometries
+>>> from shapely.geometry import Polygon
+>>>
+>>> # Process multiple polygons efficiently
+>>> polygons = [Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])]
+>>> coord_info = unpack_geometries(polygons, precompute_ring_info=True)
+>>>
+>>> # Transform coordinates in-place
+>>> coord_info.coords += displacement_vector
+>>> coord_info.invalidate_cache()
+>>>
+>>> # Compute areas efficiently without reconstruction
+>>> areas = coord_info.compute_areas(use_parallel=True)
+>>>
+>>> # Reconstruct geometries only when needed
+>>> final_polygons = reconstruct_geometries(coord_info)
 """
 
 from typing import Any, Optional
@@ -55,15 +64,16 @@ from shapely.geometry.base import BaseGeometry
 
 # Module-level exports - Public API
 __all__ = [
-    # Data structures
+    # Classes
     "GeometryCoordinateInfo",
     "compute_complex_polygon_areas_numba",
     # Area computation functions
     "compute_polygon_area_numba",
+    # Reconstruction functions
     "reconstruct_geometries",
     "reconstruct_geometry",
+    # Unpacking functions
     "unpack_geometries",
-    # Geometry processing functions
     "unpack_geometry",
 ]
 
@@ -390,21 +400,57 @@ def reconstruct_geometries(coord_info: "GeometryCoordinateInfo") -> list[BaseGeo
 
 class GeometryCoordinateInfo:
     """
-    Stores flattened coordinates and reconstruction metadata for geometries.
+    Container for flattened coordinates with reconstruction metadata.
 
-    This enables efficient separation of coordinate transformation from
+    This class enables efficient separation of coordinate transformation from
     geometry manipulation, allowing batch processing of coordinates and
     fast area computation without reconstruction overhead.
 
-    Key features:
+    Parameters
+    ----------
+    coords : np.ndarray
+        Flattened array of all coordinates, shape (n_points, 2).
+    metadata : list[dict]
+        Reconstruction information for each geometry.
+    ring_info : np.ndarray, optional
+        Precomputed ring information for parallel area computation.
+        Shape (n_rings, 4) with [polygon_id, ring_type, start_idx, size].
+    polygon_indices : np.ndarray, optional
+        Array mapping polygon_id (in ring_info) to geometry index.
+
+    Attributes
+    ----------
+    coords : np.ndarray
+        Flattened array of all coordinates, shape (n_points, 2).
+    metadata : list[dict]
+        Reconstruction information for each geometry.
+    ring_info : np.ndarray
+        Ring information array for area computation (lazily computed).
+    polygon_indices : np.ndarray
+        Mapping from polygon_id to geometry index (lazily computed).
+
+    Notes
+    -----
+    **Key Features**
+
     - Lazy computation of ring_info for parallel area calculation
     - Direct array-based area computation (no list building)
     - Optional caching of computed areas
     - Statistics and analysis methods
 
+    **Typical Workflow**
+
+    1. Create via ``unpack_geometries()``
+    2. Transform ``coords`` array in-place
+    3. Call ``invalidate_cache()`` after transformations
+    4. Call ``compute_areas()`` for efficient area calculation
+    5. Call ``reconstruct_geometries()`` only when needed
+
     Examples
     --------
+    >>> from carto_flow.optimizations import unpack_geometries, reconstruct_geometries
     >>> from shapely.geometry import Polygon
+    >>>
     >>> polygons = [Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])]
     >>> coord_info = unpack_geometries(polygons, precompute_ring_info=True)
     >>>
@@ -426,20 +472,6 @@ class GeometryCoordinateInfo:
         ring_info: Optional[np.ndarray] = None,
         polygon_indices: Optional[np.ndarray] = None,
     ):
-        """
-        Parameters
-        ----------
-        coords : np.ndarray
-            Flattened array of all coordinates, shape (n_points, 2)
-        metadata : List[dict]
-            Reconstruction information for each geometry
-        ring_info : np.ndarray, optional
-            Precomputed ring information for parallel area computation.
-            Shape (n_rings, 4) with [polygon_id, ring_type, start_idx, size]
-        polygon_indices : np.ndarray, optional
-            Array mapping polygon_id (in ring_info) to geometry index.
-            This allows direct array assignment instead of list building.
-        """
         self.coords = coords
         self.metadata = metadata
         self._ring_info = ring_info
@@ -555,21 +587,26 @@ class GeometryCoordinateInfo:
 
     def compute_areas(self, use_parallel: bool = True, use_cache: bool = True) -> np.ndarray:
         """
-        Compute areas for all geometries, returning a numpy array.
+        Compute areas for all geometries.
 
         Parameters
         ----------
-        use_parallel : bool
-            If True, use parallel Numba computation (faster for many polygons)
-        use_cache : bool
+        use_parallel : bool, default=True
+            If True, use parallel Numba computation (faster for many polygons).
+        use_cache : bool, default=True
             If True and areas are cached, return cached values.
-            Note: Cache is invalidated after coordinate transformations.
+            Cache is invalidated by ``invalidate_cache()``.
 
         Returns
         -------
-        areas : np.ndarray
+        np.ndarray
             Area for each geometry, shape (n_geometries,).
-            Non-polygon types get area = 0.0
+            Non-polygon types get area = 0.0.
+
+        Examples
+        --------
+        >>> areas = coord_info.compute_areas(use_parallel=True)
+        >>> print(f"Total area: {areas.sum():.2f}")
         """
         if use_cache and self._cached_areas is not None:
             return self._cached_areas
@@ -662,11 +699,18 @@ class GeometryCoordinateInfo:
 
         return areas
 
-    def invalidate_cache(self):
+    def invalidate_cache(self) -> None:
         """
         Invalidate cached computed values.
 
-        Call this after transforming coordinates to ensure fresh calculations.
+        Call this after transforming coordinates to ensure fresh area
+        calculations on the next ``compute_areas()`` call.
+
+        Examples
+        --------
+        >>> coord_info.coords += displacement
+        >>> coord_info.invalidate_cache()
+        >>> new_areas = coord_info.compute_areas()
         """
         self._cached_areas = None
 
@@ -676,13 +720,19 @@ class GeometryCoordinateInfo:
 
         Returns
         -------
-        stats : dict
+        dict
             Dictionary containing:
-            - n_geometries: total number of geometries
-            - n_coordinates: total number of coordinate points
-            - n_polygons: number of polygon/multipolygon geometries
-            - n_rings: total number of rings (for area computation)
-            - geometry_types: count of each geometry type
+
+            - ``n_geometries``: Total number of geometries
+            - ``n_coordinates``: Total number of coordinate points
+            - ``n_polygons``: Number of polygon/multipolygon geometries
+            - ``n_rings``: Total number of rings (for area computation)
+            - ``geometry_types``: Count of each geometry type
+
+        Examples
+        --------
+        >>> stats = coord_info.get_statistics()
+        >>> print(f"Processing {stats['n_polygons']} polygons")
         """
         geom_types = {}
         n_polygons = 0
