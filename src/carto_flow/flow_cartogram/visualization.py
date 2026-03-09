@@ -25,6 +25,7 @@ Examples
 >>> plot_convergence(cartogram.snapshots)
 """
 
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Optional
 
 import matplotlib.pyplot as plt
@@ -32,13 +33,25 @@ import numpy as np
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
-    from matplotlib.figure import Figure
+    from matplotlib.colorbar import Colorbar
+    from matplotlib.image import AxesImage
+    from matplotlib.lines import Line2D
 
     from .cartogram import Cartogram
     from .grid import Grid
+    from .plot_results import (
+        CartogramComparisonResult,
+        CartogramPlotResult,
+        ConvergencePlotResult,
+        DensityFieldResult,
+        VelocityFieldResult,
+        WorkflowConvergencePlotResult,
+    )
     from .workflow import CartogramWorkflow
 
 __all__ = [
+    "DensityPlotOptions",
+    "VelocityPlotOptions",
     "plot_cartogram",
     "plot_comparison",
     "plot_convergence",
@@ -46,6 +59,102 @@ __all__ = [
     "plot_velocity_field",
     "plot_workflow_convergence",
 ]
+
+
+@dataclass
+class DensityPlotOptions:
+    """Options for density field rendering in static plots and animations.
+
+    Passing the same ``DensityPlotOptions`` instance to both
+    ``plot_density_field`` and ``animate_fields`` guarantees identical rendering.
+
+    Parameters
+    ----------
+    normalize : str, optional
+        Density normalization: ``None`` (absolute values), ``"difference"``
+        (rho - target), or ``"ratio"`` (rho / target, log scale).
+    cmap : str, optional
+        Colormap name. Defaults based on ``normalize``.
+    alpha : float, default=1.0
+        Transparency of the density heatmap.
+    clip_percentile : float, optional
+        Clip color range to exclude outliers (difference mode only).
+        Value in [0, 100] specifies percentile from each end.
+    max_scale : float, optional
+        Fixed maximum for symmetric color scale. For difference mode sets
+        range to [-max_scale, max_scale]; for ratio mode sets
+        [1/max_scale, max_scale].
+    vmin : float, optional
+        Override color-scale minimum.
+    vmax : float, optional
+        Override color-scale maximum.
+    colorbar_kwargs : dict, optional
+        Extra keyword arguments forwarded to ``fig.colorbar()``.
+    imshow_kwargs : dict, optional
+        Extra keyword arguments forwarded to ``ax.imshow()``.
+    """
+
+    normalize: Optional[str] = None
+    cmap: Optional[str] = None
+    alpha: float = 1.0
+    clip_percentile: Optional[float] = None
+    max_scale: Optional[float] = None
+    vmin: Optional[float] = None
+    vmax: Optional[float] = None
+    colorbar_kwargs: dict = field(default_factory=dict)
+    imshow_kwargs: dict = field(default_factory=dict)
+
+
+@dataclass
+class VelocityPlotOptions:
+    """Options for velocity field rendering in static plots and animations.
+
+    Passing the same ``VelocityPlotOptions`` instance to both
+    ``plot_velocity_field`` and ``animate_fields`` guarantees identical rendering.
+
+    Parameters
+    ----------
+    skip : int, default=4
+        Plot every nth velocity arrow to reduce clutter.
+    velocity_scale : float, optional
+        Arrow length as a fraction of grid cell size at the reference magnitude.
+        If None, matplotlib auto-scales.
+    ref_magnitude : float, optional
+        Reference velocity magnitude for arrow scaling. Defaults to the
+        maximum magnitude in the field. Pass the same value to multiple calls
+        for consistent scaling.
+    color : str, default="white"
+        Base arrow color when ``color_by`` is None.
+    alpha : float, default=0.8
+        Base arrow transparency.
+    color_by : str, optional
+        Color arrows by ``"magnitude"`` or ``"direction"``. None for solid color.
+    cmap : str, optional
+        Colormap when ``color_by`` is set.
+    colorbar : bool, default=True
+        Whether to show a colorbar when ``color_by`` is set.
+    alpha_by_magnitude : bool, default=False
+        Vary arrow transparency with velocity magnitude.
+    alpha_range : tuple[float, float], default=(0.2, 1.0)
+        Min/max alpha when ``alpha_by_magnitude`` is True.
+    colorbar_kwargs : dict, optional
+        Extra keyword arguments forwarded to ``fig.colorbar()``.
+    quiver_kwargs : dict, optional
+        Extra keyword arguments forwarded to ``ax.quiver()``.
+    """
+
+    skip: int = 4
+    velocity_scale: Optional[float] = None
+    ref_magnitude: Optional[float] = None
+    color: str = "white"
+    alpha: float = 0.8
+    color_by: Optional[str] = None
+    cmap: Optional[str] = None
+    colorbar: bool = True
+    alpha_by_magnitude: bool = False
+    alpha_range: tuple = (0.2, 1.0)
+    colorbar_kwargs: dict = field(default_factory=dict)
+    quiver_kwargs: dict = field(default_factory=dict)
 
 
 def _resolve_bounds(
@@ -98,10 +207,9 @@ def _prepare_density_display(
     rho: np.ndarray,
     target_density: float,
     normalize: Optional[str],
-    area_scale: float = 1.0,
     clip_percentile: Optional[float] = None,
     max_scale: Optional[float] = None,
-    outside_mask: Optional[np.ndarray] = None,
+    geometry_mask: Optional[np.ndarray] = None,
 ) -> tuple[np.ndarray, Optional[float], Optional[float], str, str, Optional[Any]]:
     """Prepare density field for display with optional normalization.
 
@@ -111,19 +219,17 @@ def _prepare_density_display(
     Parameters
     ----------
     rho : np.ndarray
-        Raw density field array (in CRS units).
+        Density field array (already in display units, i.e. values / display-area).
     target_density : float
-        Target equilibrium density for normalization.
+        Target equilibrium density for normalization (same units as rho).
     normalize : str or None
         Normalization mode: None, "difference", or "ratio".
-    area_scale : float, default=1.0
-        Scale factor for converting density units.
     clip_percentile : float, optional
         Percentile for clipping outliers (difference mode only).
     max_scale : float, optional
         Fixed maximum for symmetric color scale.
-    outside_mask : np.ndarray, optional
-        Boolean mask for cells outside geometries.
+    geometry_mask : np.ndarray, optional
+        Integer mask for cells inside/outside geometries.
 
     Returns
     -------
@@ -137,11 +243,8 @@ def _prepare_density_display(
     """
     from matplotlib.colors import TwoSlopeNorm
 
-    # Scale rho to user-friendly units (matching target_density)
-    rho_scaled = rho / area_scale
-
     if normalize is None:
-        return rho_scaled, None, None, "viridis", "Density", None
+        return rho, None, None, "viridis", "Density", None
 
     if normalize not in ("difference", "ratio"):
         raise ValueError(f"normalize must be 'difference', 'ratio', or None, got {normalize!r}")
@@ -152,13 +255,13 @@ def _prepare_density_display(
         )
 
     if normalize == "difference":
-        rho_display = rho_scaled - target_density
+        rho_display = rho - target_density
         colorbar_label = "Density - Mean"
 
         if max_scale is not None:
             max_deviation = max_scale
         elif clip_percentile is not None:
-            inside_values = rho_display[~outside_mask] if outside_mask is not None else rho_display.ravel()
+            inside_values = rho_display[geometry_mask != -1] if geometry_mask is not None else rho_display.ravel()
             p_low = np.percentile(inside_values, clip_percentile)
             p_high = np.percentile(inside_values, 100 - clip_percentile)
             max_deviation = max(abs(p_low), abs(p_high))
@@ -167,13 +270,19 @@ def _prepare_density_display(
             data_max = rho_display.max()
             max_deviation = max(abs(data_min), abs(data_max))
 
-        vmin = -max_deviation
-        vmax = max_deviation
+        # Handle case where all values are exactly target density
+        if max_deviation == 0:
+            vmin = -1e-10
+            vmax = 1e-10
+        else:
+            vmin = -max_deviation
+            vmax = max_deviation
+
         norm = TwoSlopeNorm(vmin=vmin, vcenter=0.0, vmax=vmax)
         cmap = "RdBu_r"
 
     else:  # ratio
-        ratio = rho_scaled / target_density
+        ratio = rho / target_density
         ratio_clipped = np.clip(ratio, 1e-6, None)
         rho_display = np.log2(ratio_clipped)
         colorbar_label = "Density / Mean"
@@ -191,6 +300,134 @@ def _prepare_density_display(
         cmap = "RdBu_r"
 
     return rho_display, vmin, vmax, cmap, colorbar_label, norm
+
+
+def _compute_quiver_scale(
+    mag_max: float,
+    skip: int,
+    dx: float,
+    scale: Optional[float],
+    ref_magnitude: Optional[float] = None,
+) -> dict:
+    """Return quiver kwargs with scale/scale_units set when scale is given.
+
+    Parameters
+    ----------
+    mag_max : float
+        Maximum velocity magnitude across all arrows (used when ref_magnitude
+        is None).
+    skip : int
+        Subsampling stride (every nth grid point is plotted).
+    dx : float
+        Grid cell size.
+    scale : float or None
+        Desired arrow length as a fraction of one grid cell for an arrow at
+        the reference magnitude. If None, returns empty dict (matplotlib
+        auto-scale).
+    ref_magnitude : float, optional
+        Reference magnitude for arrow scaling. Defaults to ``mag_max``.
+
+    Returns
+    -------
+    dict
+        Keyword arguments to pass to ``ax.quiver()``.
+    """
+    if scale is None:
+        return {}
+    effective_ref = ref_magnitude if ref_magnitude is not None else mag_max
+    if effective_ref <= 0:
+        return {}
+    return {"scale": effective_ref / (scale * skip * dx), "scale_units": "xy"}
+
+
+def _render_density_on_ax(
+    ax: "Axes",
+    rho: np.ndarray,
+    target_density: float,
+    extent: list,
+    opts: "DensityPlotOptions",
+    override_vmin: Optional[float] = None,
+    override_vmax: Optional[float] = None,
+    geometry_mask: Optional[np.ndarray] = None,
+) -> "tuple[AxesImage, str]":
+    """Render a density field on an axes and return the artist and colorbar label.
+
+    Combines :func:`_prepare_density_display` with ``ax.imshow``. The
+    ``override_vmin``/``override_vmax`` parameters allow animation functions to
+    pass globally pre-computed limits while still applying the correct
+    ``TwoSlopeNorm`` for diverging colormaps. ``opts.vmin``/``opts.vmax``
+    override per-field computed limits but are themselves overridden by
+    ``override_vmin``/``override_vmax``.
+
+    Parameters
+    ----------
+    ax : Axes
+        Axes to draw on.
+    rho : np.ndarray
+        Density field array.
+    target_density : float
+        Target equilibrium density (same units as rho).
+    extent : list
+        ``[xmin, xmax, ymin, ymax]`` passed to ``ax.imshow``.
+    opts : DensityPlotOptions
+        Rendering options (normalization, colormap, alpha, clip settings, etc.).
+    override_vmin : float, optional
+        Animation global minimum — takes precedence over ``opts.vmin``.
+    override_vmax : float, optional
+        Animation global maximum — takes precedence over ``opts.vmax``.
+    geometry_mask : np.ndarray, optional
+        Mask for percentile clipping passed to :func:`_prepare_density_display`.
+
+    Returns
+    -------
+    tuple[AxesImage, str]
+        The image artist and the colorbar label string.
+    """
+    from matplotlib.colors import TwoSlopeNorm
+
+    rho_display, local_vmin, local_vmax, default_cmap, label, norm = _prepare_density_display(
+        rho,
+        target_density,
+        opts.normalize,
+        clip_percentile=opts.clip_percentile,
+        max_scale=opts.max_scale,
+        geometry_mask=geometry_mask,
+    )
+    effective_cmap = opts.cmap if opts.cmap is not None else default_cmap
+
+    # Precedence: override_vmin/vmax > opts.vmin/vmax > per-field local_vmin/vmax
+    if override_vmin is not None:
+        effective_vmin = override_vmin
+    elif opts.vmin is not None:
+        effective_vmin = opts.vmin
+    else:
+        effective_vmin = local_vmin
+
+    if override_vmax is not None:
+        effective_vmax = override_vmax
+    elif opts.vmax is not None:
+        effective_vmax = opts.vmax
+    else:
+        effective_vmax = local_vmax
+
+    if opts.normalize is not None and norm is not None:
+        norm = TwoSlopeNorm(vmin=effective_vmin, vcenter=0.0, vmax=effective_vmax)
+
+    imshow_kw: dict = {
+        "origin": "lower",
+        "extent": extent,
+        "aspect": "equal",
+        "cmap": effective_cmap,
+        "norm": norm,
+        "alpha": opts.alpha,
+        **opts.imshow_kwargs,
+    }
+    if opts.normalize is None:
+        imshow_kw["vmin"] = effective_vmin
+        imshow_kw["vmax"] = effective_vmax
+
+    im = ax.imshow(rho_display, **imshow_kw)
+    return im, label
 
 
 def _prepare_velocity_colors(
@@ -300,7 +537,7 @@ def plot_cartogram(
     cmap: str = "RdYlGn_r",
     legend: bool = True,
     **kwargs: Any,
-) -> "Axes":
+) -> "CartogramPlotResult":
     """Plot morphed geometries from a Cartogram.
 
     Parameters
@@ -326,8 +563,8 @@ def plot_cartogram(
 
     Returns
     -------
-    matplotlib.axes.Axes
-        The axes with the plot
+    CartogramPlotResult
+        Result with the axes and named artist references.
 
     Examples
     --------
@@ -338,7 +575,7 @@ def plot_cartogram(
     >>> plot_cartogram(cartogram, column='population', cmap='Blues')
     """
     if ax is None:
-        _, ax = plt.subplots(1, 1, figsize=(10, 8))
+        _, ax = plt.subplots(1, 1, figsize=(10, 7))
 
     # Determine which columns to include based on requested column
     include_errors = column == "_morph_error_pct" or column is None
@@ -354,14 +591,18 @@ def plot_cartogram(
     if column is None and "_morph_error_pct" in gdf.columns:
         column = "_morph_error_pct"
 
+    before = len(ax.collections)
     if column is not None and column in gdf.columns:
         gdf.plot(ax=ax, column=column, cmap=cmap, legend=legend, **kwargs)
     else:
         gdf.plot(ax=ax, **kwargs)
+    collections = list(ax.collections[before:])
 
     ax.set_aspect("equal")
     ax.set_title("Cartogram Result")
-    return ax
+    from .plot_results import CartogramPlotResult
+
+    return CartogramPlotResult(ax=ax, collections=collections)
 
 
 def plot_comparison(
@@ -372,7 +613,7 @@ def plot_comparison(
     left_iteration: Optional[int] = None,
     figsize: tuple[float, float] = (14, 6),
     **kwargs: Any,
-) -> tuple["Figure", tuple["Axes", "Axes"]]:
+) -> "CartogramComparisonResult":
     """Side-by-side comparison of two geometries.
 
     Supports comparing:
@@ -399,8 +640,8 @@ def plot_comparison(
 
     Returns
     -------
-    tuple[Figure, tuple[Axes, Axes]]
-        The figure and a tuple of (left_ax, right_ax) axes
+    CartogramComparisonResult
+        Result with the figure, both axes, and named artist references.
 
     Examples
     --------
@@ -433,27 +674,39 @@ def plot_comparison(
         left_gdf = left
         left_title = "Original"
 
+    before_left = len(ax1.collections)
     if hasattr(left_gdf, "plot"):
         if column and column in left_gdf.columns:
             left_gdf.plot(ax=ax1, column=column, legend=True, **kwargs)
         else:
             left_gdf.plot(ax=ax1, **kwargs)
+    left_collections = list(ax1.collections[before_left:])
     ax1.set_aspect("equal")
     ax1.set_title(left_title)
 
     # Plot right panel (always a Cartogram)
     right_gdf = right.to_geodataframe(iteration=iteration)
+    before_right = len(ax2.collections)
     if hasattr(right_gdf, "plot"):
         if column and column in right_gdf.columns:
             right_gdf.plot(ax=ax2, column=column, legend=True, **kwargs)
         else:
             right_gdf.plot(ax=ax2, **kwargs)
+    right_collections = list(ax2.collections[before_right:])
     ax2.set_aspect("equal")
     status_str = right.status.value if hasattr(right.status, "value") else str(right.status)
     ax2.set_title(f"Cartogram (status: {status_str})")
 
     plt.tight_layout()
-    return fig, (ax1, ax2)
+    from .plot_results import CartogramComparisonResult
+
+    return CartogramComparisonResult(
+        fig=fig,
+        ax_left=ax1,
+        ax_right=ax2,
+        left_collections=left_collections,
+        right_collections=right_collections,
+    )
 
 
 def plot_convergence(
@@ -464,7 +717,7 @@ def plot_convergence(
     show_tolerance: bool = True,
     show_recompute: bool = False,
     **kwargs: Any,
-) -> "Axes":
+) -> "ConvergencePlotResult":
     """Plot convergence metrics (mean/max error) over iterations.
 
     Parameters
@@ -491,8 +744,8 @@ def plot_convergence(
 
     Returns
     -------
-    matplotlib.axes.Axes
-        The axes with the convergence plot (primary axis for max error)
+    ConvergencePlotResult
+        Result with the axes and named artist references.
 
     Examples
     --------
@@ -534,9 +787,16 @@ def plot_convergence(
     max_color = "C0"  # Blue
     mean_color = "C1"  # Orange
 
+    # Track returned artists
+    max_line: Line2D | None = None
+    mean_line: Line2D | None = None
+    ax_twin: Axes | None = None
+    tolerance_lines: list[Line2D] = []
+    recompute_lines: list[Line2D] = []
+
     # Plot max error on primary axis
     if show_both and len(max_errors) > 0:
-        ax.plot(
+        lines = ax.plot(
             iterations[: len(max_errors)],
             max_errors,
             label="Max Error",
@@ -545,13 +805,14 @@ def plot_convergence(
             markersize=3,
             **kwargs,
         )
+        max_line = lines[0]
         ax.set_ylabel("Max Error (%)" if use_pct else "Max Error (log2)", color=max_color)
         ax.tick_params(axis="y", labelcolor=max_color)
 
         # Create secondary y-axis for mean error
         if len(mean_errors) > 0:
-            ax2 = ax.twinx()
-            ax2.plot(
+            ax_twin = ax.twinx()
+            lines = ax_twin.plot(
                 iterations[: len(mean_errors)],
                 mean_errors,
                 label="Mean Error",
@@ -560,8 +821,9 @@ def plot_convergence(
                 markersize=3,
                 **kwargs,
             )
-            ax2.set_ylabel("Mean Error (%)" if use_pct else "Mean Error (log2)", color=mean_color)
-            ax2.tick_params(axis="y", labelcolor=mean_color)
+            mean_line = lines[0]
+            ax_twin.set_ylabel("Mean Error (%)" if use_pct else "Mean Error (log2)", color=mean_color)
+            ax_twin.tick_params(axis="y", labelcolor=mean_color)
 
             # Add tolerance lines
             if show_tolerance and cartogram.options is not None:
@@ -569,7 +831,7 @@ def plot_convergence(
                 if mean_tol is not None:
                     # Convert to percentage if using percentage mode
                     tol_value = mean_tol * 100 if use_pct else mean_tol
-                    ax2.axhline(
+                    tol_line = ax_twin.axhline(
                         y=tol_value,
                         color=mean_color,
                         linestyle="-",
@@ -577,10 +839,11 @@ def plot_convergence(
                         alpha=0.7,
                         label=f"Mean Tol ({mean_tol * 100:.1f}%)",
                     )
+                    tolerance_lines.append(tol_line)
                 max_tol = cartogram.options.max_tol
                 if max_tol is not None:
                     tol_value = max_tol * 100 if use_pct else max_tol
-                    ax.axhline(
+                    tol_line = ax.axhline(
                         y=tol_value,
                         color=max_color,
                         linestyle="-",
@@ -588,14 +851,15 @@ def plot_convergence(
                         alpha=0.7,
                         label=f"Max Tol ({max_tol * 100:.1f}%)",
                     )
+                    tolerance_lines.append(tol_line)
 
             # Combined legend from both axes
             lines1, labels1 = ax.get_legend_handles_labels()
-            lines2, labels2 = ax2.get_legend_handles_labels()
+            lines2, labels2 = ax_twin.get_legend_handles_labels()
             ax.legend(lines1 + lines2, labels1 + labels2, loc="upper right")
     elif len(mean_errors) > 0:
         # Only mean error requested
-        ax.plot(
+        lines = ax.plot(
             iterations[: len(mean_errors)],
             mean_errors,
             label="Mean Error",
@@ -604,6 +868,7 @@ def plot_convergence(
             markersize=3,
             **kwargs,
         )
+        mean_line = lines[0]
         ax.set_ylabel("Mean Error (%)" if use_pct else "Mean Error (log2)")
 
         # Add tolerance line for mean error
@@ -611,7 +876,7 @@ def plot_convergence(
             mean_tol = cartogram.options.mean_tol
             if mean_tol is not None:
                 tol_value = mean_tol * 100 if use_pct else mean_tol
-                ax.axhline(
+                tol_line = ax.axhline(
                     y=tol_value,
                     color=mean_color,
                     linestyle="-",
@@ -619,6 +884,7 @@ def plot_convergence(
                     alpha=0.7,
                     label=f"Mean Tol ({mean_tol * 100:.1f}%)",
                 )
+                tolerance_lines.append(tol_line)
         ax.legend(loc="upper right")
 
     # Add vertical lines for density recomputation iterations
@@ -628,31 +894,39 @@ def plot_convergence(
             max_iter = int(np.max(iterations))
             recompute_iters = list(range(0, max_iter + 1, recompute_every))
             for i, recomp_iter in enumerate(recompute_iters):
-                ax.axvline(
+                vline = ax.axvline(
                     x=recomp_iter,
                     color="gray",
                     linestyle="--",
                     alpha=0.4,
                     label="Density recompute" if i == 0 else None,
                 )
+                recompute_lines.append(vline)
 
     ax.set_xlabel("Iteration")
     ax.set_title("Convergence History")
     ax.grid(True, alpha=0.3)
 
-    return ax
+    from .plot_results import ConvergencePlotResult
+
+    return ConvergencePlotResult(
+        ax=ax,
+        max_line=max_line,
+        mean_line=mean_line,
+        ax_mean=ax_twin,
+        tolerance_lines=tolerance_lines,
+        recompute_lines=recompute_lines,
+    )
 
 
 def plot_density_field(
     cartogram: "Cartogram",
+    *,
     iteration: Optional[int] = None,
     ax: Optional["Axes"] = None,
     bounds: Optional[Any] = None,
-    normalize: Optional[str] = None,
-    clip_percentile: Optional[float] = None,
-    max_scale: Optional[float] = None,
-    **kwargs: Any,
-) -> "Axes":
+    density: Optional["DensityPlotOptions"] = None,
+) -> "DensityFieldResult":
     """Visualize density field as a heatmap.
 
     Parameters
@@ -670,62 +944,49 @@ def plot_density_field(
         - "data": Clip to original data bounds (no margin)
         - float: Data bounds + margin as fraction (e.g., 0.1 = 10% margin)
         - tuple: (xmin, ymin, xmax, ymax) custom bounds
-    normalize : str, optional
-        Show density relative to target_density (the target equilibrium):
-        - None: Show absolute density values (default)
-        - "difference": Show (rho - target_density), centered at 0.
-          Positive values indicate denser regions, negative indicate sparser.
-        - "ratio": Show (rho / target_density), centered at 1.0.
-          Values >1 indicate denser regions, <1 indicate sparser.
-        Both use a diverging colormap (RdBu_r).
-    clip_percentile : float, optional
-        Clip color range to exclude outliers (for difference mode only).
-        Value in range [0, 100] specifies percentile from each end.
-        E.g., clip_percentile=2 clips to [2nd, 98th] percentiles.
-        Helps when extreme outliers dominate the color scale.
-        Ignored for ratio mode (which uses log scale for outlier robustness).
-    max_scale : float, optional
-        Fixed maximum for symmetric color scale. Useful for comparing multiple
-        snapshots with consistent coloring.
-        - For difference mode: sets range to [-max_scale, max_scale]
-        - For ratio mode: sets range to [1/max_scale, max_scale]
-          E.g., max_scale=4 gives range [0.25, 4] (4x from equilibrium)
-        Overrides automatic scaling and clip_percentile.
-    **kwargs
-        Additional arguments passed to plt.imshow()
+    density : DensityPlotOptions, optional
+        Rendering options for the density field. Key fields:
+
+        - ``normalize``: None (absolute), ``"difference"``, or ``"ratio"``.
+        - ``clip_percentile``: Clip outliers for difference mode.
+        - ``max_scale``: Fixed symmetric color scale maximum.
+        - ``cmap``: Override colormap.
+        - ``vmin``/``vmax``: Override color-scale limits.
+        - ``colorbar_kwargs``: Passed to ``plt.colorbar()``.
+        - ``imshow_kwargs``: Passed to ``ax.imshow()``.
 
     Returns
     -------
-    matplotlib.axes.Axes
-        The axes with the density field plot
+    DensityFieldResult
+        Result with the axes and named artist references.
 
     Examples
     --------
     >>> from carto_flow import morph_gdf, MorphOptions
-    >>> from carto_flow.flow_cartogram.visualization import plot_density_field
+    >>> from carto_flow.flow_cartogram.visualization import plot_density_field, DensityPlotOptions
     >>> cartogram = morph_gdf(gdf, 'pop', options=MorphOptions(save_internals=True))
     >>> plot_density_field(cartogram)
 
     >>> # Clip to original data bounds (no margin)
     >>> plot_density_field(cartogram, bounds="data")
 
-    >>> # Clip with 10% margin around data bounds
-    >>> plot_density_field(cartogram, bounds=0.1)
-
     >>> # Show density difference from equilibrium (centered at 0)
-    >>> plot_density_field(cartogram, normalize="difference")
+    >>> plot_density_field(cartogram, density=DensityPlotOptions(normalize="difference"))
 
     >>> # Clip outliers to [2nd, 98th] percentiles for difference mode
-    >>> plot_density_field(cartogram, normalize="difference", clip_percentile=2)
+    >>> plot_density_field(cartogram, density=DensityPlotOptions(normalize="difference", clip_percentile=2))
 
     >>> # Show density ratio to equilibrium (centered at 1)
-    >>> plot_density_field(cartogram, normalize="ratio")
+    >>> plot_density_field(cartogram, density=DensityPlotOptions(normalize="ratio"))
 
     >>> # Compare first and last iterations with consistent color scale
     >>> fig, (ax1, ax2) = plt.subplots(1, 2)
-    >>> plot_density_field(cartogram, iteration=0, ax=ax1, normalize="ratio", max_scale=4)
-    >>> plot_density_field(cartogram, ax=ax2, normalize="ratio", max_scale=4)
+    >>> opts = DensityPlotOptions(normalize="ratio", max_scale=4)
+    >>> plot_density_field(cartogram, iteration=0, ax=ax1, density=opts)
+    >>> plot_density_field(cartogram, ax=ax2, density=opts)
     """
+    opts = density or DensityPlotOptions()
+
     # Extract internals from cartogram
     if cartogram.internals is None:
         raise ValueError(
@@ -749,75 +1010,41 @@ def plot_density_field(
 
     rho = snapshot.rho
     extent = [grid.xmin, grid.xmax, grid.ymin, grid.ymax]
-
-    # Get area_scale for unit conversion
-    area_scale = cartogram.options.area_scale if cartogram.options else 1.0
     target_density = cartogram.target_density
+    geometry_mask = getattr(snapshot, "geometry_mask", None)
 
-    # Get outside_mask for percentile clipping
-    outside_mask = getattr(snapshot, "outside_mask", None)
-
-    # Use helper for density normalization
-    rho_display, vmin, vmax, cmap_name, colorbar_label, norm = _prepare_density_display(
+    im, colorbar_label = _render_density_on_ax(
+        ax,
         rho,
         target_density,
-        normalize,
-        area_scale=area_scale,
-        clip_percentile=clip_percentile,
-        max_scale=max_scale,
-        outside_mask=outside_mask,
+        extent,
+        opts,
+        geometry_mask=geometry_mask,
     )
 
-    # Allow user overrides via kwargs
-    vmin = kwargs.pop("vmin", vmin)
-    vmax = kwargs.pop("vmax", vmax)
-    cmap = kwargs.pop("cmap", cmap_name)
+    cbar_kw = {"label": colorbar_label, **opts.colorbar_kwargs}
+    cbar = plt.colorbar(im, ax=ax, **cbar_kw)
 
-    # Update norm if user provided custom vmin/vmax
-    if normalize is not None and norm is not None:
-        from matplotlib.colors import TwoSlopeNorm
-
-        norm = TwoSlopeNorm(vmin=vmin, vcenter=0.0, vmax=vmax)
-
-    # Determine title suffix and colorbar formatter
-    if normalize == "difference":
-        title_suffix = f" (difference, clipped {clip_percentile}%)" if clip_percentile else " (difference)"
-        colorbar_formatter = None
-    elif normalize == "ratio":
-        title_suffix = " (ratio, log scale)"
-
-        # Custom formatter to show ratio values on colorbar
-        def colorbar_formatter(x, pos):
-            ratio_val = 2**x
-            if ratio_val >= 1:
-                if ratio_val == int(ratio_val):
-                    return f"{int(ratio_val)}"
-                return f"{ratio_val:.1f}"
-            else:
-                if ratio_val >= 0.1:
-                    return f"{ratio_val:.2f}"
-                return f"{ratio_val:.3f}"
-
-    else:
-        title_suffix = ""
-        colorbar_formatter = None
-
-    im = ax.imshow(
-        rho_display,
-        origin="lower",
-        extent=extent,
-        aspect="equal",
-        cmap=cmap,
-        norm=norm,
-        **kwargs,
-    )
-    cbar = plt.colorbar(im, ax=ax, label=colorbar_label)
-
-    # Apply custom tick formatter for ratio mode
-    if colorbar_formatter is not None:
+    # Apply custom tick formatter for ratio mode (colorbar shows ratio, not log2)
+    if opts.normalize == "ratio":
         from matplotlib.ticker import FuncFormatter
 
-        cbar.ax.yaxis.set_major_formatter(FuncFormatter(colorbar_formatter))
+        def _ratio_fmt(x, pos):
+            ratio_val = 2**x
+            if ratio_val >= 1:
+                return f"{int(ratio_val)}" if ratio_val == int(ratio_val) else f"{ratio_val:.1f}"
+            return f"{ratio_val:.2f}" if ratio_val >= 0.1 else f"{ratio_val:.3f}"
+
+        cbar.ax.yaxis.set_major_formatter(FuncFormatter(_ratio_fmt))
+
+    # Determine title suffix
+    if opts.normalize == "difference":
+        title_suffix = f" (difference, clipped {opts.clip_percentile}%)" if opts.clip_percentile else " (difference)"
+    elif opts.normalize == "ratio":
+        title_suffix = " (ratio, log scale)"
+    else:
+        title_suffix = ""
+
     ax.set_title(f"Density Field (iteration {snapshot.iteration}){title_suffix}")
     ax.set_xlabel("X")
     ax.set_ylabel("Y")
@@ -829,24 +1056,19 @@ def plot_density_field(
         ax.set_xlim(xmin, xmax)
         ax.set_ylim(ymin, ymax)
 
-    return ax
+    from .plot_results import DensityFieldResult
+
+    return DensityFieldResult(ax=ax, image=im, colorbar=cbar)
 
 
 def plot_velocity_field(
     cartogram: "Cartogram",
+    *,
     iteration: Optional[int] = None,
     ax: Optional["Axes"] = None,
-    skip: int = 4,
-    arrow_scale: Optional[float] = None,
-    ref_magnitude: Optional[float] = None,
-    color_by: Optional[str] = None,
-    cmap: Optional[str] = None,
-    colorbar: bool = True,
-    alpha_by_magnitude: bool = False,
-    alpha_range: tuple[float, float] = (0.2, 1.0),
     bounds: Optional[Any] = None,
-    **kwargs: Any,
-) -> "Axes":
+    velocity: Optional["VelocityPlotOptions"] = None,
+) -> "VelocityFieldResult":
     """Visualize velocity field as a quiver plot.
 
     Parameters
@@ -858,77 +1080,56 @@ def plot_velocity_field(
         Which iteration snapshot to visualize (default: latest).
     ax : matplotlib.axes.Axes, optional
         Axes to plot on. If None, creates new figure.
-    skip : int, default=4
-        Plot every nth arrow to reduce clutter.
-    arrow_scale : float, optional
-        Arrow length as a fraction of the grid cell spacing (after skip).
-        For example, arrow_scale=1.0 means the reference velocity arrow
-        spans one grid cell. If None, matplotlib auto-scales.
-    ref_magnitude : float, optional
-        Reference velocity magnitude for arrow scaling. An arrow with this
-        magnitude will have length `arrow_scale * cell_size`. If None,
-        uses the maximum magnitude in the current field. To compare
-        multiple fields on the same scale, pass the same ref_magnitude
-        to all plots (e.g., the global maximum across all fields).
-    color_by : str, optional
-        Color arrows by a property:
-        - None: No coloring (default)
-        - "magnitude": Color by velocity magnitude (sqrt(vx² + vy²))
-        - "direction": Color by direction angle (-π to π)
-    cmap : str, optional
-        Colormap to use when color_by is specified.
-        Defaults to "viridis" for magnitude, "twilight" for direction.
-    colorbar : bool, default=True
-        Whether to show colorbar when color_by is specified.
-    alpha_by_magnitude : bool, default=False
-        If True, arrow transparency varies with magnitude (stronger = more opaque).
-    alpha_range : tuple[float, float], default=(0.2, 1.0)
-        Min and max alpha values when alpha_by_magnitude is True.
     bounds : str, float, or tuple, optional
         Clip view to specified bounds (removes grid margin):
         - None: Show full grid extent (default)
         - "data": Clip to original data bounds (no margin)
         - float: Data bounds + margin as fraction (e.g., 0.1 = 10% margin)
         - tuple: (xmin, ymin, xmax, ymax) custom bounds
-    **kwargs
-        Additional arguments passed to plt.quiver()
+    velocity : VelocityPlotOptions, optional
+        Rendering options for the velocity field. Key fields:
+
+        - ``skip``: Plot every nth arrow (default 4).
+        - ``velocity_scale``: Arrow length as fraction of grid cell spacing.
+        - ``ref_magnitude``: Reference magnitude for consistent scaling.
+        - ``color`` / ``alpha``: Base arrow color and transparency.
+        - ``color_by``: None, ``"magnitude"``, or ``"direction"``.
+        - ``cmap``: Colormap when ``color_by`` is set.
+        - ``colorbar``: Whether to show a colorbar (default True).
+        - ``alpha_by_magnitude``: Vary alpha with velocity magnitude.
+        - ``alpha_range``: Min/max alpha for magnitude-based transparency.
+        - ``colorbar_kwargs``: Passed to ``plt.colorbar()``.
+        - ``quiver_kwargs``: Passed to ``ax.quiver()``.
 
     Returns
     -------
-    matplotlib.axes.Axes
-        The axes with the velocity field plot
+    VelocityFieldResult
+        Result with the axes and named artist references.
 
     Examples
     --------
     >>> from carto_flow import morph_gdf, MorphOptions
-    >>> from carto_flow.flow_cartogram.visualization import plot_velocity_field
+    >>> from carto_flow.flow_cartogram.visualization import plot_velocity_field, VelocityPlotOptions
     >>> cartogram = morph_gdf(gdf, 'pop', options=MorphOptions(save_internals=True))
     >>> plot_velocity_field(cartogram)
 
     >>> # Color by magnitude
-    >>> plot_velocity_field(cartogram, color_by="magnitude", cmap="plasma")
+    >>> plot_velocity_field(cartogram, velocity=VelocityPlotOptions(color_by="magnitude", cmap="plasma"))
 
     >>> # Color by direction (uses cyclic colormap by default)
-    >>> plot_velocity_field(cartogram, color_by="direction")
+    >>> plot_velocity_field(cartogram, velocity=VelocityPlotOptions(color_by="direction"))
 
     >>> # Transparency by magnitude (fade out weak velocities)
-    >>> plot_velocity_field(cartogram, alpha_by_magnitude=True)
-
-    >>> # Combine direction coloring with magnitude transparency
-    >>> plot_velocity_field(cartogram, color_by="direction", alpha_by_magnitude=True)
+    >>> plot_velocity_field(cartogram, velocity=VelocityPlotOptions(alpha_by_magnitude=True))
 
     >>> # Compare two velocity fields with consistent arrow scaling
     >>> fig, (ax1, ax2) = plt.subplots(1, 2)
-    >>> max_vel = 0.5  # Use same reference for both
-    >>> plot_velocity_field(cartogram, iteration=0, ax=ax1, arrow_scale=1.0, ref_magnitude=max_vel)
-    >>> plot_velocity_field(cartogram, ax=ax2, arrow_scale=1.0, ref_magnitude=max_vel)
-
-    >>> # Clip to original data bounds (no margin)
-    >>> plot_velocity_field(cartogram, bounds="data")
-
-    >>> # Clip with 10% margin around data bounds
-    >>> plot_velocity_field(cartogram, bounds=0.1)
+    >>> opts = VelocityPlotOptions(velocity_scale=1.0, ref_magnitude=0.5)
+    >>> plot_velocity_field(cartogram, iteration=0, ax=ax1, velocity=opts)
+    >>> plot_velocity_field(cartogram, ax=ax2, velocity=opts)
     """
+    opts = velocity or VelocityPlotOptions()
+
     # Extract internals from cartogram
     if cartogram.internals is None:
         raise ValueError(
@@ -959,47 +1160,50 @@ def plot_velocity_field(
     X, Y = grid.X, grid.Y
 
     # Subsample for clearer visualization
-    X_sub = X[::skip, ::skip]
-    Y_sub = Y[::skip, ::skip]
-    vx_sub = vx[::skip, ::skip]
-    vy_sub = vy[::skip, ::skip]
+    X_sub = X[:: opts.skip, :: opts.skip]
+    Y_sub = Y[:: opts.skip, :: opts.skip]
+    vx_sub = vx[:: opts.skip, :: opts.skip]
+    vy_sub = vy[:: opts.skip, :: opts.skip]
 
-    # Compute magnitude for arrow scaling
+    # Compute magnitude for arrow scaling and colorbar
     magnitude = np.sqrt(vx_sub**2 + vy_sub**2)
     mag_min, mag_max = magnitude.min(), magnitude.max()
 
     # Build quiver kwargs for consistent arrow scaling
-    quiver_kwargs = dict(kwargs)
-    if arrow_scale is not None:
-        cell_size = skip * grid.dx
-        effective_ref = ref_magnitude if ref_magnitude is not None else mag_max
-        if effective_ref > 0:
-            quiver_kwargs["scale"] = effective_ref / (arrow_scale * cell_size)
-            quiver_kwargs["scale_units"] = "xy"
+    quiver_kw = {
+        **opts.quiver_kwargs,
+        **_compute_quiver_scale(mag_max, opts.skip, grid.dx, opts.velocity_scale, opts.ref_magnitude),
+    }
 
     # Use shared helper for velocity colors
     colors, colorbar_label, effective_cmap = _prepare_velocity_colors(
         vx_sub,
         vy_sub,
-        color_by=color_by,
-        alpha_by_magnitude=alpha_by_magnitude,
-        alpha_range=alpha_range,
-        cmap=cmap,
-        base_alpha=0.8,
+        color_by=opts.color_by,
+        alpha_by_magnitude=opts.alpha_by_magnitude,
+        alpha_range=opts.alpha_range,
+        cmap=opts.cmap,
+        base_color=opts.color,
+        base_alpha=opts.alpha,
     )
 
-    ax.quiver(X_sub, Y_sub, vx_sub, vy_sub, color=colors, **quiver_kwargs)
+    quiver_art = ax.quiver(X_sub, Y_sub, vx_sub, vy_sub, color=colors, **quiver_kw)
 
-    if colorbar and color_by is not None:
+    colorbar_art: Colorbar | None = None
+    if opts.colorbar and opts.color_by is not None:
         import matplotlib.cm as cm
         from matplotlib.colors import Normalize
 
-        norm = Normalize(vmin=mag_min, vmax=mag_max) if color_by == "magnitude" else Normalize(vmin=-np.pi, vmax=np.pi)
-
+        norm = (
+            Normalize(vmin=mag_min, vmax=mag_max)
+            if opts.color_by == "magnitude"
+            else Normalize(vmin=-np.pi, vmax=np.pi)
+        )
         cmap_obj = plt.get_cmap(effective_cmap)
         sm = cm.ScalarMappable(cmap=cmap_obj, norm=norm)
         sm.set_array([])
-        plt.colorbar(sm, ax=ax, label=colorbar_label)
+        cbar_kw = {"label": colorbar_label, **opts.colorbar_kwargs}
+        colorbar_art = plt.colorbar(sm, ax=ax, **cbar_kw)
 
     ax.set_aspect("equal")
     ax.set_title(f"Velocity Field (iteration {snapshot.iteration})")
@@ -1013,7 +1217,9 @@ def plot_velocity_field(
         ax.set_xlim(xmin, xmax)
         ax.set_ylim(ymin, ymax)
 
-    return ax
+    from .plot_results import VelocityFieldResult
+
+    return VelocityFieldResult(ax=ax, arrows=quiver_art, colorbar=colorbar_art)
 
 
 def plot_workflow_convergence(
@@ -1027,7 +1233,7 @@ def plot_workflow_convergence(
     cmap: str = "tab10",
     figsize: tuple[float, float] = (12, 6),
     **kwargs: Any,
-) -> "Axes":
+) -> "WorkflowConvergencePlotResult":
     """Plot convergence history across all cartograms in a workflow.
 
     Shows the sequential convergence of multiple morphing runs on a single plot,
@@ -1060,8 +1266,8 @@ def plot_workflow_convergence(
 
     Returns
     -------
-    matplotlib.axes.Axes
-        The axes with the convergence plot (primary axis for max error).
+    WorkflowConvergencePlotResult
+        Result with the axes and named artist references.
 
     Examples
     --------
@@ -1140,8 +1346,14 @@ def plot_workflow_convergence(
     max_color_base = "C0"  # Blue for max error
     mean_color_base = "C1"  # Orange for mean error
 
+    # Track returned artists
+    max_lines: list[Line2D] = []
+    mean_lines: list[Line2D] = []
+    boundary_lines: list[Line2D] = []
+    tolerance_lines: list[Line2D] = []
+
     # Create secondary axis for mean error if showing both
-    ax2 = None
+    ax2: Axes | None = None
     if metric == "both":
         ax2 = ax.twinx()
 
@@ -1163,7 +1375,7 @@ def plot_workflow_convergence(
         # Plot max error on primary axis
         if metric in ("max", "both") and len(max_errors) > 0:
             color = run_color if color_by_run else max_color_base
-            ax.plot(
+            lines = ax.plot(
                 iterations[: len(max_errors)],
                 max_errors,
                 label=f"Max Error{label_suffix}" if run_idx == 0 or not color_by_run else None,
@@ -1173,13 +1385,15 @@ def plot_workflow_convergence(
                 linestyle="-",
                 **kwargs,
             )
+            if lines:
+                max_lines.append(lines[0])
 
         # Plot mean error (on secondary axis if showing both)
         if metric in ("mean", "both") and len(mean_errors) > 0:
             target_ax = ax2 if metric == "both" else ax
             color = run_color if color_by_run else mean_color_base
             linestyle = "--" if metric == "both" and not color_by_run else "-"
-            target_ax.plot(
+            lines = target_ax.plot(
                 iterations[: len(mean_errors)],
                 mean_errors,
                 label=f"Mean Error{label_suffix}" if run_idx == 0 or not color_by_run else None,
@@ -1189,6 +1403,8 @@ def plot_workflow_convergence(
                 linestyle=linestyle,
                 **kwargs,
             )
+            if lines:
+                mean_lines.append(lines[0])
 
     # Configure y-axis labels
     y_label = "Error (%)" if use_pct else "Error (log2)"
@@ -1208,7 +1424,7 @@ def plot_workflow_convergence(
     # Add run boundary lines
     if show_run_boundaries and len(run_boundaries) > 2:
         for i, boundary in enumerate(run_boundaries[1:-1], start=1):
-            ax.axvline(
+            vline = ax.axvline(
                 x=boundary,
                 color="gray",
                 linestyle="--",
@@ -1216,6 +1432,7 @@ def plot_workflow_convergence(
                 linewidth=1,
                 label="Run boundary" if i == 1 else None,
             )
+            boundary_lines.append(vline)
 
     # Add tolerance lines from latest options
     if show_tolerance:
@@ -1224,7 +1441,7 @@ def plot_workflow_convergence(
             if metric in ("mean", "both") and latest_options.mean_tol is not None:
                 tol_value = latest_options.mean_tol * 100 if use_pct else latest_options.mean_tol
                 target_ax = ax2 if metric == "both" else ax
-                target_ax.axhline(
+                tol_line = target_ax.axhline(
                     y=tol_value,
                     color=mean_color_base,
                     linestyle=":",
@@ -1232,9 +1449,10 @@ def plot_workflow_convergence(
                     alpha=0.7,
                     label=f"Mean Tol ({latest_options.mean_tol * 100:.1f}%)",
                 )
+                tolerance_lines.append(tol_line)
             if metric in ("max", "both") and latest_options.max_tol is not None:
                 tol_value = latest_options.max_tol * 100 if use_pct else latest_options.max_tol
-                ax.axhline(
+                tol_line = ax.axhline(
                     y=tol_value,
                     color=max_color_base,
                     linestyle=":",
@@ -1242,6 +1460,7 @@ def plot_workflow_convergence(
                     alpha=0.7,
                     label=f"Max Tol ({latest_options.max_tol * 100:.1f}%)",
                 )
+                tolerance_lines.append(tol_line)
 
     # Legend
     if metric == "both" and ax2 is not None:
@@ -1255,4 +1474,13 @@ def plot_workflow_convergence(
     ax.set_title("Workflow Convergence History")
     ax.grid(True, alpha=0.3)
 
-    return ax
+    from .plot_results import WorkflowConvergencePlotResult
+
+    return WorkflowConvergencePlotResult(
+        ax=ax,
+        ax_mean=ax2,
+        max_lines=max_lines,
+        mean_lines=mean_lines,
+        boundary_lines=boundary_lines,
+        tolerance_lines=tolerance_lines,
+    )

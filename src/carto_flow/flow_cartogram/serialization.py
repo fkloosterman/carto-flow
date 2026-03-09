@@ -51,9 +51,9 @@ def save_cartogram(
 ) -> None:
     """Save a Cartogram to JSON format.
 
-    Saves the cartogram metadata, status, and error metrics.
-    For full geometry preservation, use cartogram.save() with a
-    geospatial format like .gpkg.
+    Saves geometries, source data, error metrics, and convergence history
+    so the Cartogram can be fully restored with load_cartogram() /
+    Cartogram.load().
 
     Parameters
     ----------
@@ -65,37 +65,26 @@ def save_cartogram(
     Examples
     --------
     >>> save_cartogram(cartogram, 'result.json')
+    >>> loaded = load_cartogram('result.json')
     """
     path = Path(path)
 
-    # Extract serializable data
-    data = {
+    data: dict = {
         "status": cartogram.status.value if hasattr(cartogram.status, "value") else str(cartogram.status),
         "niterations": cartogram.niterations,
         "duration": cartogram.duration,
         "target_density": cartogram.target_density,
     }
 
-    # Add error metrics if available
-    errors = cartogram.get_errors()
-    if errors:
-        data["errors"] = {
-            "mean_log_error": errors.mean_log_error,
-            "max_log_error": errors.max_log_error,
-            "mean_error_pct": errors.mean_error_pct,
-            "max_error_pct": errors.max_error_pct,
-        }
-
-    # Add grid info if available
+    # Grid with full bounds for reconstruction
     if cartogram.grid:
         data["grid"] = {
+            "bounds": list(cartogram.grid.bounds),
             "sx": cartogram.grid.sx,
             "sy": cartogram.grid.sy,
-            "dx": cartogram.grid.dx,
-            "dy": cartogram.grid.dy,
         }
 
-    # Add options info if available
+    # Options (numeric fields only — callables are not JSON-serializable)
     if cartogram.options:
         data["options"] = {
             "n_iter": cartogram.options.n_iter,
@@ -104,17 +93,46 @@ def save_cartogram(
             "max_tol": cartogram.options.max_tol,
         }
 
-    # Add snapshot history summary
-    if cartogram.snapshots:
-        data["snapshots"] = {
-            "count": len(cartogram.snapshots.snapshots),
-            "iterations": cartogram.snapshots.get_iterations(),
+    # Latest morphed geometries
+    latest = cartogram.snapshots.latest() if cartogram.snapshots else None
+    if latest is not None and latest.geometry is not None:
+        data["latest_geometries"] = [geom.__geo_interface__ for geom in latest.geometry]
+        if latest.density is not None:
+            data["density"] = latest.density.tolist()
+
+    # Error metrics — scalars + per-geometry arrays
+    errors = cartogram.get_errors()
+    if errors is not None:
+        data["errors"] = {
+            "mean_log_error": errors.mean_log_error,
+            "max_log_error": errors.max_log_error,
+            "mean_error_pct": errors.mean_error_pct,
+            "max_error_pct": errors.max_error_pct,
+            "log_errors": errors.log_errors.tolist(),
+            "errors_pct": errors.errors_pct.tolist(),
         }
 
-    # Add convergence history (all iterations)
+    # Source GeoDataFrame — original geometries + attribute columns
+    if cartogram._source_gdf is not None:
+        src = cartogram._source_gdf
+        if src.crs is not None:
+            data["crs"] = src.crs.to_string()
+        data["index"] = list(src.index)
+        non_geom_cols = [c for c in src.columns if c != src.geometry.name]
+        data["source_columns"] = non_geom_cols
+        # Convert column values to Python scalars for JSON serialisation
+        records = src[non_geom_cols].to_dict(orient="records")
+        data["source_records"] = [
+            {k: (v.item() if hasattr(v, "item") else v) for k, v in row.items()} for row in records
+        ]
+        data["source_geometries"] = [geom.__geo_interface__ for geom in src.geometry]
+
+    if cartogram._value_column is not None:
+        data["value_column"] = cartogram._value_column
+
+    # Convergence history (all iterations)
     if cartogram.convergence is not None and len(cartogram.convergence) > 0:
         data["convergence"] = {
-            "count": len(cartogram.convergence),
             "iterations": cartogram.convergence.iterations.tolist(),
             "mean_log_errors": cartogram.convergence.mean_log_errors.tolist(),
             "max_log_errors": cartogram.convergence.max_log_errors.tolist(),
@@ -129,9 +147,9 @@ def save_cartogram(
 def load_cartogram(path: Union[str, Path]) -> "Cartogram":
     """Load a Cartogram from JSON format.
 
-    Note: This loads metadata only. For full geometry restoration,
-    the original GeoDataFrame and morphing must be re-run, or use
-    pickle-based save_workflow/load_workflow.
+    Restores a Cartogram saved by save_cartogram() / Cartogram.save(),
+    including morphed geometries, source GeoDataFrame, error metrics,
+    and convergence history.
 
     Parameters
     ----------
@@ -141,18 +159,107 @@ def load_cartogram(path: Union[str, Path]) -> "Cartogram":
     Returns
     -------
     Cartogram
-        Partial Cartogram with metadata (no geometries)
+        Fully restored Cartogram with one snapshot (the final result).
+        Supports to_geodataframe() and plot() immediately after loading.
 
     Raises
     ------
-    NotImplementedError
-        Full Cartogram restoration from JSON is not yet implemented.
-        Use save_workflow/load_workflow for complete state preservation.
+    ValueError
+        If the file was saved without geometries (old metadata-only format).
     """
-    raise NotImplementedError(
-        "Full Cartogram restoration from JSON is not yet implemented. "
-        "Use save_workflow/load_workflow for complete state preservation, "
-        "or re-run the morphing with the original data."
+    import numpy as np
+    from shapely.geometry import shape
+
+    from .cartogram import Cartogram
+    from .errors import MorphErrors
+    from .grid import Grid
+    from .history import CartogramSnapshot, ConvergenceHistory, History
+    from .options import MorphStatus
+
+    path = Path(path)
+    with open(path) as f:
+        data = json.load(f)
+
+    if "latest_geometries" not in data:
+        raise ValueError(
+            "This JSON contains metadata only and cannot be restored. "
+            "Re-save the cartogram using Cartogram.save() with the current version."
+        )
+
+    # Morphed geometries
+    morphed_geoms = [shape(g) for g in data["latest_geometries"]]
+
+    # Error metrics
+    errors = None
+    if "errors" in data:
+        e = data["errors"]
+        errors = MorphErrors(
+            log_errors=np.array(e["log_errors"]),
+            mean_log_error=e["mean_log_error"],
+            max_log_error=e["max_log_error"],
+            errors_pct=np.array(e["errors_pct"]),
+            mean_error_pct=e["mean_error_pct"],
+            max_error_pct=e["max_error_pct"],
+        )
+
+    density = np.array(data["density"]) if "density" in data else None
+
+    niterations = data.get("niterations", 0)
+    snapshot = CartogramSnapshot(
+        iteration=niterations,
+        geometry=morphed_geoms,
+        errors=errors,
+        density=density,
+    )
+    history = History()
+    history.add_snapshot(snapshot)
+
+    # Source GeoDataFrame
+    source_gdf = None
+    if "source_geometries" in data:
+        import geopandas as gpd
+
+        src_geoms = [shape(g) for g in data["source_geometries"]]
+        records = data.get("source_records", [{} for _ in src_geoms])
+        index = data.get("index", list(range(len(src_geoms))))
+        source_gdf = gpd.GeoDataFrame(records, geometry=src_geoms, index=index)
+        if "crs" in data:
+            source_gdf = source_gdf.set_crs(data["crs"])
+
+    # Convergence history
+    conv = None
+    if "convergence" in data:
+        c = data["convergence"]
+        conv = ConvergenceHistory()
+        conv._iterations = np.array(c["iterations"], dtype=np.int64)
+        conv._mean_log_errors = np.array(c["mean_log_errors"])
+        conv._max_log_errors = np.array(c["max_log_errors"])
+        conv._mean_errors_pct = np.array(c["mean_errors_pct"])
+        conv._max_errors_pct = np.array(c["max_errors_pct"])
+        conv._size = len(c["iterations"])
+
+    # Grid
+    grid = None
+    if "grid" in data and "bounds" in data["grid"]:
+        g = data["grid"]
+        grid = Grid(bounds=tuple(g["bounds"]), size=(g["sx"], g["sy"]))
+
+    # Status
+    try:
+        status = MorphStatus(data.get("status", "completed"))
+    except ValueError:
+        status = MorphStatus.COMPLETED
+
+    return Cartogram(
+        snapshots=history,
+        convergence=conv,
+        status=status,
+        niterations=niterations,
+        duration=data.get("duration", 0.0),
+        target_density=data.get("target_density"),
+        grid=grid,
+        _source_gdf=source_gdf,
+        _value_column=data.get("value_column"),
     )
 
 

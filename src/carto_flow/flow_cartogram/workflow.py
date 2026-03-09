@@ -201,6 +201,7 @@ class CartogramWorkflow:
             grid=options.grid,
             _source_gdf=self._original_gdf,
             _source_landmarks_gdf=self._original_landmarks_gdf,
+            _value_column=self._column,
         )
 
     # ========================================================================
@@ -266,6 +267,7 @@ class CartogramWorkflow:
         # Set source references for to_geodataframe()
         result._source_gdf = self._original_gdf
         result._source_landmarks_gdf = self._original_landmarks_gdf
+        result._value_column = self._column
 
         self._results.append(result)
         return result
@@ -294,7 +296,9 @@ class CartogramWorkflow:
         square : bool, default=True
             Whether to create square grids.
         options : MorphOptions, list[MorphOptions], or None
-            Options for each level. Single options applied to all levels.
+            Options for each level. When a single MorphOptions is provided (or
+            None), the same options are used at every level. When a list is
+            provided, each entry maps directly to a level.
 
         Returns
         -------
@@ -325,11 +329,16 @@ class CartogramWorkflow:
                 raise ValueError(f"Options length ({len(options)}) must match levels ({levels})")
             options_list = [copy.deepcopy(opt) for opt in options]
 
-        for _level, (grid, level_options) in enumerate(zip(grids, options_list)):
+        for level, (grid, level_options) in enumerate(zip(grids, options_list)):
             level_options.grid = grid
             level_options.progress_message = (
                 f"{'Refining' if self.is_morphed else 'Morphing'} with {grid.sx}x{grid.sy} grid"
             )
+
+            if level > 0:
+                # Pre-scaling is a one-time correction on the initial geometry;
+                # suppress it on refinement levels where geometry is already scaled.
+                level_options.prescale_components = False
 
             result = self.morph(options=level_options)
 

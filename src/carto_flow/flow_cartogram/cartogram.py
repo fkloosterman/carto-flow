@@ -34,6 +34,7 @@ if TYPE_CHECKING:
     from .grid import Grid
     from .history import CartogramSnapshot, ConvergenceHistory, ErrorRecord, History
     from .options import MorphOptions, MorphStatus
+    from .plot_results import CartogramPlotResult
 
 __all__ = ["Cartogram"]
 
@@ -92,6 +93,7 @@ class Cartogram:
     # Source references for GeoDataFrame reconstruction (not shown in repr)
     _source_gdf: Optional[Any] = field(default=None, repr=False)
     _source_landmarks_gdf: Optional[Any] = field(default=None, repr=False)
+    _value_column: Optional[str] = field(default=None, repr=False)
 
     # ========================================================================
     # Convenience Access
@@ -299,7 +301,7 @@ class Cartogram:
         legend: bool = True,
         ax: Optional[Any] = None,
         **kwargs,
-    ) -> Any:
+    ) -> "CartogramPlotResult":
         """Plot the cartogram.
 
         Parameters
@@ -323,8 +325,8 @@ class Cartogram:
 
         Returns
         -------
-        matplotlib.axes.Axes
-            The plot axes.
+        CartogramPlotResult
+            Result with the axes and named artist references.
 
         Examples
         --------

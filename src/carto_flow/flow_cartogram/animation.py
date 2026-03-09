@@ -39,6 +39,7 @@ if TYPE_CHECKING:
     from geopandas import GeoDataFrame
 
     from .cartogram import Cartogram
+    from .visualization import DensityPlotOptions, VelocityPlotOptions
     from .workflow import CartogramWorkflow
 
 __all__ = [
@@ -57,6 +58,13 @@ __all__ = [
 # Type alias for position mapper functions
 # Signature: (progress: float, variables: dict[str, np.ndarray]) -> float
 PositionMapper = Callable[[float, dict[str, np.ndarray]], float]
+
+
+class _SafeFormatDict(dict):
+    """Format dict that returns NaN for unknown keys instead of raising KeyError."""
+
+    def __missing__(self, key: str) -> float:
+        return float("nan")
 
 
 # =============================================================================
@@ -564,13 +572,16 @@ def animate_morph_history(
     fps: int = 15,
     interpolation: str = "nearest",
     position_mapper: Optional[PositionMapper] = None,
-    column: Optional[str] = None,
-    color_values: Optional[list[np.ndarray]] = None,
+    color_by: Optional[Union[str, np.ndarray, list]] = None,
     vmin: Optional[float] = None,
     vmax: Optional[float] = None,
     cmap: str = "viridis",
     colorbar: bool = False,
     colorbar_label: Optional[str] = None,
+    show_axes: bool = True,
+    colorbar_kwargs: Optional[dict] = None,
+    title: Optional[Union[str, bool]] = None,
+    precompute: bool = True,
     figsize: tuple[float, float] = (10, 8),
     **kwargs: Any,
 ) -> FuncAnimation:
@@ -596,15 +607,16 @@ def animate_morph_history(
         - linear_over("max_error"): Linear time-to-max-error
         - linear_over(custom_values): Linear over any custom array
         Use weights_to_position_mapper() for weight-based functions.
-    column : str, optional
-        Column to use for coloring geometries. Values are read from each
-        snapshot's GeoDataFrame and color limits are computed globally.
-        Special value: "errors_pct" extracts per-geometry percentage errors
-        from each snapshot's errors attribute.
-    color_values : list of arrays, optional
-        Per-snapshot color values. Each array has one value per geometry.
-        When provided, takes precedence over column. Color values are
-        interpolated when using linear geometry interpolation.
+    color_by : str, np.ndarray, or list of np.ndarray, optional
+        What to color geometries by:
+        - ``"errors_pct"``: per-geometry percentage error at each snapshot
+        - ``"density"``: per-geometry density (values/area) at each snapshot
+        - ``"original"``: values from the column used to build the cartogram
+          (static across snapshots; requires ``cartogram._value_column``)
+        - any other str: column name looked up in ``cartogram._source_gdf``
+          (static across snapshots)
+        - np.ndarray: single array broadcast to all snapshots (static)
+        - list of np.ndarray: one array per snapshot
     vmin : float, optional
         Minimum value for color scale. If None, computed from all values.
     vmax : float, optional
@@ -614,7 +626,27 @@ def animate_morph_history(
     colorbar : bool, default=False
         Whether to show a colorbar.
     colorbar_label : str, optional
-        Label for the colorbar. Defaults to column name if using column.
+        Label for the colorbar. Auto-set from color_by if not provided.
+    show_axes : bool, default=True
+        If False, hides the axes frame, ticks, and labels (``ax.axis("off")``).
+        Useful for clean map-style animations.
+    colorbar_kwargs : dict, optional
+        Additional keyword arguments passed to ``fig.colorbar()``.
+        Example: ``dict(shrink=0.8, pad=0.02)``.
+        The ``"label"`` key overrides the auto-set label.
+    title : str, bool, or None, default=None
+        Controls the axes title each frame.
+        - ``None``: auto-generated title showing iteration and error (default)
+        - ``False`` or ``""``: no title
+        - str: format template rendered with ``str.format_map()`` each frame.
+          Available keys: ``{iteration}``, ``{mean_error}``, ``{max_error}``,
+          ``{mean_error_pct}``, ``{max_error_pct}``, ``{t}``.
+          Unavailable keys (e.g. when no error history was saved) yield ``nan``.
+    precompute : bool, default=True
+        If True, all frames are computed before the animation starts.
+        Eliminates per-frame geometry interpolation and GeoDataFrame copying,
+        giving a significant speedup especially for ``interpolation="linear"``.
+        Set to False to reduce peak memory usage for very long animations.
     figsize : tuple, default=(10, 8)
         Figure size (width, height)
     **kwargs
@@ -641,11 +673,6 @@ def animate_morph_history(
     Color limits are computed globally across all snapshots to ensure
     consistent coloring throughout the animation.
 
-    Special column handling:
-    - ``column="errors_pct"``: Extracts per-geometry percentage errors from
-      each snapshot's ``errors.errors_pct`` attribute.
-      This allows coloring geometries by their individual area errors.
-
     Examples
     --------
     >>> workflow = CartogramWorkflow(gdf, 'pop')
@@ -655,18 +682,21 @@ def animate_morph_history(
 
     >>> # Color by per-geometry error percentage
     >>> anim = animate_morph_history(
-    ...     cartogram, column="errors_pct", cmap="RdYlGn_r",
-    ...     colorbar=True, colorbar_label="Error %"
+    ...     cartogram, color_by="errors_pct", cmap="RdYlGn_r", colorbar=True
     ... )
 
-    >>> # Custom per-snapshot values
-    >>> densities = [snap.density for snap in cartogram.snapshots]
-    >>> anim = animate_morph_history(cartogram, color_values=densities, cmap="plasma")
+    >>> # Color by per-snapshot density
+    >>> anim = animate_morph_history(cartogram, color_by="density", cmap="plasma", colorbar=True)
 
-    >>> # Smooth animation with linear interpolation (colors also interpolated)
-    >>> anim = animate_morph_history(
-    ...     cartogram, interpolation="linear", column="errors_pct"
-    ... )
+    >>> # Color by original data column (static)
+    >>> anim = animate_morph_history(cartogram, color_by="original", colorbar=True)
+    >>> anim = animate_morph_history(cartogram, color_by="population", colorbar=True)
+
+    >>> # Single static array
+    >>> anim = animate_morph_history(cartogram, color_by=gdf["population"].values)
+
+    >>> # Per-snapshot arrays
+    >>> anim = animate_morph_history(cartogram, color_by=[snap.density for snap in cartogram.snapshots])
     """
     if interpolation not in ("nearest", "linear"):
         raise ValueError(f"interpolation must be 'nearest' or 'linear', got {interpolation!r}")
@@ -682,10 +712,13 @@ def animate_morph_history(
     # Extract geometries and build variables dict from snapshots
     geometries = []
     snapshot_errors_pct: list[Optional[np.ndarray]] = []
+    snapshot_densities: list[Optional[np.ndarray]] = []
     variables: dict[str, list] = {
         "iteration": [],
         "mean_error": [],
         "max_error": [],
+        "mean_error_pct": [],
+        "max_error_pct": [],
     }
 
     for snap in snapshots:
@@ -696,11 +729,20 @@ def animate_morph_history(
             if snap.errors is not None:
                 variables["mean_error"].append(snap.errors.mean_log_error)
                 variables["max_error"].append(snap.errors.max_log_error)
+                variables["mean_error_pct"].append(snap.errors.mean_error_pct)
+                variables["max_error_pct"].append(snap.errors.max_error_pct)
                 snapshot_errors_pct.append(snap.errors.errors_pct)
             else:
                 variables["mean_error"].append(None)
                 variables["max_error"].append(None)
+                variables["mean_error_pct"].append(None)
+                variables["max_error_pct"].append(None)
                 snapshot_errors_pct.append(None)
+            # Extract per-geometry density
+            if hasattr(snap, "density") and snap.density is not None:
+                snapshot_densities.append(np.asarray(snap.density))
+            else:
+                snapshot_densities.append(None)
 
     if not geometries:
         raise ValueError(
@@ -711,48 +753,76 @@ def animate_morph_history(
     n_snapshots = len(geometries)
     n_frames = int(duration * fps)
 
-    # Check if column refers to a snapshot attribute (e.g., "errors_pct")
-    # and use snapshot errors_pct as color_values
-    if column == "errors_pct" and all(e is not None for e in snapshot_errors_pct):
-        color_values = snapshot_errors_pct
+    # Resolve color_by to a list of per-snapshot arrays and a default label
+    resolved_colorbar_label = colorbar_label
+    color_values: Optional[list[np.ndarray]] = None
 
-    # Validate color_values if provided
-    if color_values is not None:
-        if len(color_values) != n_snapshots:
-            raise ValueError(
-                f"color_values length ({len(color_values)}) must match number of snapshots ({n_snapshots})"
-            )
-        # Convert to numpy arrays
-        color_values = [np.asarray(cv) for cv in color_values]
+    if isinstance(color_by, np.ndarray):
+        # Single static array — broadcast to all snapshots
+        color_values = [np.asarray(color_by)] * n_snapshots
+
+    elif isinstance(color_by, list):
+        # Per-snapshot arrays
+        if len(color_by) != n_snapshots:
+            raise ValueError(f"color_by list length ({len(color_by)}) must match number of snapshots ({n_snapshots})")
+        color_values = [np.asarray(cv) for cv in color_by]
+
+    elif isinstance(color_by, str):
+        if color_by == "errors_pct":
+            if all(e is not None for e in snapshot_errors_pct):
+                color_values = snapshot_errors_pct  # type: ignore[assignment]
+            if resolved_colorbar_label is None:
+                resolved_colorbar_label = "Error %"
+
+        elif color_by == "density":
+            if all(d is not None for d in snapshot_densities):
+                color_values = snapshot_densities  # type: ignore[assignment]
+            if resolved_colorbar_label is None:
+                resolved_colorbar_label = "Density"
+
+        elif color_by == "original":
+            col = getattr(cartogram, "_value_column", None)
+            src = getattr(cartogram, "_source_gdf", None)
+            if col is None or src is None or col not in src.columns:
+                raise ValueError(
+                    "color_by='original' requires cartogram._value_column and _source_gdf "
+                    "(set automatically when using CartogramWorkflow)."
+                )
+            vals = np.asarray(src[col].values)
+            color_values = [vals] * n_snapshots
+            if resolved_colorbar_label is None:
+                resolved_colorbar_label = col
+
+        else:
+            # Any other column name — look up in source GDF (static)
+            src = getattr(cartogram, "_source_gdf", None)
+            if src is not None and color_by in src.columns:
+                vals = np.asarray(src[color_by].values)
+                color_values = [vals] * n_snapshots
+                if resolved_colorbar_label is None:
+                    resolved_colorbar_label = color_by
+            else:
+                available = list(src.columns) if src is not None else []
+                raise ValueError(f"Column '{color_by}' not found in source GeoDataFrame. Available: {available}")
 
     # Convert geometry arrays to GeoDataFrames for plotting
     import geopandas as gpd
 
     gdfs = [gpd.GeoDataFrame(geometry=list(geom)) for geom in geometries]
 
-    # Determine coloring mode and gather all color values for global limits
-    use_coloring = column is not None or color_values is not None
-    all_color_values: list[np.ndarray] = []
+    # Determine coloring mode and compute global color limits
+    use_coloring = color_values is not None
 
-    if color_values is not None:
-        all_color_values = color_values
-    # Note: column-based coloring from GeoDataFrame columns is no longer supported
-    # since snapshots store geometry arrays, not GeoDataFrames with columns.
-    # Use color_values or "errors_pct" instead.
-
-    # Compute global color limits
     computed_vmin = None
     computed_vmax = None
-    if all_color_values:
-        computed_vmin = min(np.nanmin(cv) for cv in all_color_values)
-        computed_vmax = max(np.nanmax(cv) for cv in all_color_values)
+    if color_values is not None:
+        computed_vmin = min(np.nanmin(cv) for cv in color_values)
+        computed_vmax = max(np.nanmax(cv) for cv in color_values)
 
     color_vmin = vmin if vmin is not None else computed_vmin
     color_vmax = vmax if vmax is not None else computed_vmax
 
-    # Determine colorbar label
-    if colorbar_label is None and column is not None:
-        colorbar_label = column
+    colorbar_label = resolved_colorbar_label
 
     # Convert lists to arrays, removing variables that are all None
     variables_arrays: dict[str, np.ndarray] = {}
@@ -791,15 +861,13 @@ def animate_morph_history(
         """Get color values for a specific snapshot."""
         if color_values is not None:
             return color_values[idx]
-        # Column-based coloring from GeoDataFrame columns is no longer supported
-        # since snapshots store geometry arrays, not GeoDataFrames with columns.
         return None
 
-    def get_frame_data(frame: int) -> tuple["GeoDataFrame", int, float, Optional[float], Optional[np.ndarray]]:
+    def get_frame_data(frame: int) -> tuple["GeoDataFrame", int, float, Optional[float], Optional[np.ndarray], float]:
         """Get the geometry and color values for a given frame.
 
-        Returns (gdf, snapshot_idx, iteration, error, colors) where gdf and colors
-        may be interpolated.
+        Returns (gdf, snapshot_idx, iteration, error, colors, t) where gdf and colors
+        may be interpolated and t is the inter-snapshot fractional position.
         """
         # Map frame to progress [0, 1]
         progress = frame / max(1, n_frames - 1)
@@ -818,7 +886,7 @@ def animate_morph_history(
             idx = idx_before if t < 0.5 else idx_after
             error = errors[idx] if errors is not None else None
             colors = get_color_values_for_snapshot(idx)
-            return gdfs[idx], idx, iterations[idx], error, colors
+            return gdfs[idx], idx, iterations[idx], error, colors, 0.0
 
         else:  # linear interpolation
             if idx_before == idx_after or t <= 0:
@@ -826,11 +894,13 @@ def animate_morph_history(
                 iteration = iterations[idx_before]
                 error = errors[idx_before] if errors is not None else None
                 colors = get_color_values_for_snapshot(idx_before)
+                return gdf, idx_before, iteration, error, colors, 0.0
             elif t >= 1:
                 gdf = gdfs[idx_after]
                 iteration = iterations[idx_after]
                 error = errors[idx_after] if errors is not None else None
                 colors = get_color_values_for_snapshot(idx_after)
+                return gdf, idx_before, iteration, error, colors, 1.0
             else:
                 # Get color values for interpolation
                 colors_before = get_color_values_for_snapshot(idx_before)
@@ -855,42 +925,86 @@ def animate_morph_history(
                 # Get interpolated colors from the GeoDataFrame
                 colors = gdf["_color"].values if "_color" in gdf.columns else None
 
-            return gdf, idx_before, iteration, error, colors
+                return gdf, idx_before, iteration, error, colors, t
+
+    # Pre-compute all frames to avoid per-frame interpolation and GeoDataFrame copying
+    if precompute:
+        _precomputed: list = []
+        for _f in range(n_frames):
+            _gdf, _snap_idx, _iteration, _error, _colors, _t_val = get_frame_data(_f)
+            if use_coloring and _colors is not None and color_vmin is not None:
+                _plot_gdf = _gdf.assign(_plot_color=_colors)
+                _has_colors = True
+            else:
+                _plot_gdf = _gdf
+                _has_colors = False
+            _precomputed.append((_plot_gdf, _snap_idx, _iteration, _error, _t_val, _has_colors))
 
     def update(frame):
         ax.clear()
-        gdf, _snapshot_idx, iteration, error, colors = get_frame_data(frame)
+        if not show_axes:
+            ax.axis("off")
+
+        if precompute:
+            plot_gdf, snapshot_idx, iteration, mean_error, _t_val, _has_colors = _precomputed[frame]
+        else:
+            _gdf, snapshot_idx, iteration, mean_error, _colors, _t_val = get_frame_data(frame)
+            if use_coloring and _colors is not None and color_vmin is not None:
+                plot_gdf = _gdf.assign(_plot_color=_colors)
+                _has_colors = True
+            else:
+                plot_gdf = _gdf
+                _has_colors = False
 
         # Determine how to plot
-        if use_coloring and colors is not None and color_vmin is not None:
-            # Add color values to a temporary column for plotting
-            plot_gdf = gdf.copy()
-            plot_gdf["_plot_color"] = colors
+        if use_coloring and _has_colors and color_vmin is not None:
             mappable = plot_gdf.plot(
                 ax=ax, column="_plot_color", legend=False, vmin=color_vmin, vmax=color_vmax, cmap=cmap, **kwargs
             )
         else:
-            gdf.plot(ax=ax, **kwargs)
+            plot_gdf.plot(ax=ax, **kwargs)
             mappable = None
 
         # Add colorbar on first frame if requested
         if colorbar and not cbar_added[0] and mappable is not None and color_vmin is not None:
             sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=color_vmin, vmax=color_vmax))
             sm.set_array([])
-            fig.colorbar(sm, ax=ax, label=colorbar_label)
+            _cbar_kw = {"label": colorbar_label, **(colorbar_kwargs or {})}
+            fig.colorbar(sm, ax=ax, **_cbar_kw)
             cbar_added[0] = True
 
         ax.set_xlim(xmin, xmax)
         ax.set_ylim(ymin, ymax)
         ax.set_aspect("equal")
 
-        error_str = ""
-        if error is not None:
-            error_str = f", error={error:.4f}"
-        if isinstance(iteration, float) and not iteration.is_integer():
-            ax.set_title(f"Iteration {iteration:.1f}{error_str}")
+        if title is None:
+            error_str = ""
+            if mean_error is not None:
+                error_str = f", error={mean_error:.4f}"
+            if isinstance(iteration, float) and not iteration.is_integer():
+                ax.set_title(f"Iteration {iteration:.1f}{error_str}")
+            else:
+                ax.set_title(f"Iteration {int(iteration)}{error_str}")
+        elif title:
+            _max_err_arr = variables_arrays.get("max_error")
+            _mean_pct_arr = variables_arrays.get("mean_error_pct")
+            _max_pct_arr = variables_arrays.get("max_error_pct")
+            _nan = float("nan")
+            _n_iters = variables["iteration"][-1] if variables["iteration"] else _nan
+            _t_elapsed = frame * duration / max(1, n_frames - 1)
+            ctx = _SafeFormatDict(
+                iteration=iteration,
+                n_iterations=_n_iters,
+                t=_t_elapsed,
+                duration=duration,
+                mean_error=mean_error if mean_error is not None else _nan,
+                max_error=_max_err_arr[snapshot_idx] if _max_err_arr is not None else _nan,
+                mean_error_pct=_mean_pct_arr[snapshot_idx] if _mean_pct_arr is not None else _nan,
+                max_error_pct=_max_pct_arr[snapshot_idx] if _max_pct_arr is not None else _nan,
+            )
+            ax.set_title(title.format_map(ctx))
         else:
-            ax.set_title(f"Iteration {int(iteration)}{error_str}")
+            ax.set_title("")
 
         return []
 
@@ -925,6 +1039,10 @@ def animate_geometry_keyframes(
     cmap: str = "viridis",
     colorbar: bool = False,
     colorbar_label: Optional[str] = None,
+    show_axes: bool = True,
+    colorbar_kwargs: Optional[dict] = None,
+    title: Optional[Union[str, bool]] = None,
+    precompute: bool = True,
     figsize: tuple[float, float] = (10, 8),
     **kwargs: Any,
 ) -> FuncAnimation:
@@ -975,6 +1093,26 @@ def animate_geometry_keyframes(
         Whether to show a colorbar.
     colorbar_label : str, optional
         Label for the colorbar. Defaults to column name if using column.
+    show_axes : bool, default=True
+        If False, hides the axes frame, ticks, and labels (``ax.axis("off")``).
+        Useful for clean map-style animations.
+    colorbar_kwargs : dict, optional
+        Additional keyword arguments passed to ``fig.colorbar()``.
+        Example: ``dict(shrink=0.8, pad=0.02)``.
+        The ``"label"`` key overrides the auto-set label.
+    title : str, bool, or None, default=None
+        Controls the axes title each frame.
+
+        - ``None``: auto-title ("Keyframe X/N" or transition label).
+        - ``False`` or ``""``: no title.
+        - ``str``: format-string expanded with ``str.format_map(ctx)`` each
+          frame. Available keys: ``{keyframe}`` (1-based), ``{n_keyframes}``,
+          ``{t}`` (inter-keyframe fraction in [0, 1]).
+    precompute : bool, default=True
+        If True, all frames are computed before the animation starts.
+        Eliminates per-frame geometry interpolation and GeoDataFrame copying,
+        giving a significant speedup especially for ``interpolation="linear"``.
+        Set to False to reduce peak memory usage for very long animations.
     figsize : tuple, default=(10, 8)
         Figure size (width, height)
     **kwargs
@@ -1235,41 +1373,74 @@ def animate_geometry_keyframes(
     # Select the appropriate frame getter
     get_frame_data = get_frame_data_position_mapper if use_position_mapper else get_frame_data_legacy
 
+    # Pre-compute all frames to avoid per-frame interpolation and GeoDataFrame copying
+    if precompute:
+        _precomputed: list = []
+        for _f in range(actual_n_frames):
+            _gdf, _keyframe_idx, _t, _colors = get_frame_data(_f)
+            if use_coloring and _colors is not None and color_vmin is not None:
+                _plot_gdf = _gdf.assign(_plot_color=_colors)
+                _has_colors = True
+            elif use_coloring and column is not None and column in _gdf.columns and color_vmin is not None:
+                _plot_gdf = _gdf
+                _has_colors = False  # use column directly
+            else:
+                _plot_gdf = _gdf
+                _has_colors = False
+            _precomputed.append((_plot_gdf, _keyframe_idx, _t, _has_colors))
+
     def update(frame):
         ax.clear()
-        gdf, keyframe_idx, t, colors = get_frame_data(frame)
+        if not show_axes:
+            ax.axis("off")
+
+        if precompute:
+            plot_gdf, keyframe_idx, t, _has_colors = _precomputed[frame]
+        else:
+            _gdf, keyframe_idx, t, _colors = get_frame_data(frame)
+            if use_coloring and _colors is not None and color_vmin is not None:
+                plot_gdf = _gdf.assign(_plot_color=_colors)
+                _has_colors = True
+            else:
+                plot_gdf = _gdf
+                _has_colors = False
 
         # Determine how to plot
-        if use_coloring and colors is not None and color_vmin is not None:
-            # Add color values to a temporary column for plotting
-            plot_gdf = gdf.copy()
-            plot_gdf["_plot_color"] = colors
+        if use_coloring and _has_colors and color_vmin is not None:
             mappable = plot_gdf.plot(
                 ax=ax, column="_plot_color", legend=False, vmin=color_vmin, vmax=color_vmax, cmap=cmap, **kwargs
             )
-        elif use_coloring and column is not None and column in gdf.columns and color_vmin is not None:
-            mappable = gdf.plot(
+        elif use_coloring and column is not None and column in plot_gdf.columns and color_vmin is not None:
+            mappable = plot_gdf.plot(
                 ax=ax, column=column, legend=False, vmin=color_vmin, vmax=color_vmax, cmap=cmap, **kwargs
             )
         else:
-            gdf.plot(ax=ax, **kwargs)
+            plot_gdf.plot(ax=ax, **kwargs)
             mappable = None
 
         # Add colorbar on first frame if requested
         if colorbar and not cbar_added[0] and mappable is not None and color_vmin is not None:
             sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=color_vmin, vmax=color_vmax))
             sm.set_array([])
-            fig.colorbar(sm, ax=ax, label=colorbar_label)
+            _cbar_kw = {"label": colorbar_label, **(colorbar_kwargs or {})}
+            fig.colorbar(sm, ax=ax, **_cbar_kw)
             cbar_added[0] = True
 
         ax.set_xlim(xmin, xmax)
         ax.set_ylim(ymin, ymax)
         ax.set_aspect("equal")
 
-        if t == 0.0:
-            ax.set_title(f"Keyframe {keyframe_idx + 1}/{n_keyframes}")
+        if title is None:
+            if t == 0.0:
+                ax.set_title(f"Keyframe {keyframe_idx + 1}/{n_keyframes}")
+            else:
+                ax.set_title(f"Transition {keyframe_idx + 1} -> {keyframe_idx + 2} ({t:.0%})")
+        elif title:
+            _t_elapsed = frame * duration / max(1, actual_n_frames - 1)
+            ctx = _SafeFormatDict(keyframe=keyframe_idx + 1, n_keyframes=n_keyframes, t=_t_elapsed, duration=duration)
+            ax.set_title(title.format_map(ctx))
         else:
-            ax.set_title(f"Transition {keyframe_idx + 1} -> {keyframe_idx + 2} ({t:.0%})")
+            ax.set_title("")
 
         return []
 
@@ -1292,31 +1463,19 @@ def animate_geometry_keyframes(
 
 def animate_fields(
     cartogram: "Cartogram",
+    *,
     duration: float = 5.0,
     fps: int = 15,
     interpolation: str = "nearest",
     position_mapper: Optional[PositionMapper] = None,
     bounds: Optional[Any] = None,
-    # What to show
     show_density: bool = True,
     show_velocity: bool = False,
-    # Density options
-    normalize: Optional[str] = None,
-    density_cmap: Optional[str] = None,
-    density_alpha: float = 1.0,
-    # Velocity options
-    velocity_skip: int = 4,
-    velocity_color: str = "white",
-    velocity_alpha: float = 0.8,
-    velocity_scale: Optional[float] = None,
-    velocity_color_by: Optional[str] = None,
-    velocity_cmap: Optional[str] = None,
-    velocity_colorbar: bool = False,
-    velocity_alpha_by_magnitude: bool = False,
-    velocity_alpha_range: tuple[float, float] = (0.2, 1.0),
-    velocity_kwargs: Optional[dict[str, Any]] = None,
+    density: Optional["DensityPlotOptions"] = None,
+    velocity: Optional["VelocityPlotOptions"] = None,
+    show_axes: bool = True,
+    title: Optional[Union[str, bool]] = None,
     figsize: tuple[float, float] = (10, 8),
-    **kwargs: Any,
 ) -> FuncAnimation:
     """Animate density and/or velocity fields over iterations.
 
@@ -1338,36 +1497,37 @@ def animate_fields(
         Whether to show density field heatmap
     show_velocity : bool, default=False
         Whether to show velocity field arrows
-    normalize : str, optional
-        Density normalization: None, "difference", or "ratio"
-    density_cmap : str, optional
-        Colormap for density field. Defaults based on normalize setting.
-    density_alpha : float, default=1.0
-        Alpha (transparency) for density heatmap
-    velocity_skip : int, default=4
-        Plot every nth velocity arrow
-    velocity_color : str, default="white"
-        Color for velocity arrows (when not using velocity_color_by)
-    velocity_alpha : float, default=0.8
-        Alpha for velocity arrows
-    velocity_scale : float, optional
-        Scale factor for arrow lengths
-    velocity_color_by : str, optional
-        Color arrows by: None, "magnitude", or "direction"
-    velocity_cmap : str, optional
-        Colormap for velocity coloring
-    velocity_colorbar : bool, default=False
-        Whether to show colorbar for velocity
-    velocity_alpha_by_magnitude : bool, default=False
-        If True, arrow transparency varies with magnitude
-    velocity_alpha_range : tuple[float, float], default=(0.2, 1.0)
-        Min and max alpha when velocity_alpha_by_magnitude is True
-    velocity_kwargs : dict, optional
-        Additional arguments passed to quiver (for velocity arrows)
+    density : DensityPlotOptions, optional
+        Rendering options for the density field. Key fields:
+
+        - ``normalize``: None (absolute), ``"difference"``, or ``"ratio"``.
+        - ``clip_percentile`` / ``max_scale``: outlier control for difference mode.
+        - ``cmap`` / ``alpha``: colormap and transparency.
+        - ``vmin`` / ``vmax``: override the global color-scale limits.
+        - ``colorbar_kwargs``: passed to ``fig.colorbar()``.
+        - ``imshow_kwargs``: passed to ``ax.imshow()``.
+    velocity : VelocityPlotOptions, optional
+        Rendering options for the velocity field. Key fields:
+
+        - ``skip``: plot every nth arrow (default 4).
+        - ``velocity_scale`` / ``ref_magnitude``: arrow length control.
+        - ``color`` / ``alpha``: base arrow color and transparency.
+        - ``color_by``: None, ``"magnitude"``, or ``"direction"``.
+        - ``colorbar``: whether to show a colorbar (default False in animations).
+        - ``colorbar_kwargs``: passed to ``fig.colorbar()``.
+        - ``quiver_kwargs``: passed to ``ax.quiver()``.
+    show_axes : bool, default=True
+        If False, hides the axes frame, ticks, and labels (``ax.axis("off")``).
+        Useful for clean map-style animations.
+    title : str, bool, or None, default=None
+        Controls the axes title each frame.
+
+        - ``None``: auto-title ("Density Field (iteration N)").
+        - ``False`` or ``""``: no title.
+        - ``str``: format-string expanded each frame. Available keys:
+          ``{iteration}``, ``{field}`` (e.g. "Density Field"), ``{t}``.
     figsize : tuple, default=(10, 8)
         Figure size (width, height)
-    **kwargs
-        Additional arguments passed to imshow (for density)
 
     Returns
     -------
@@ -1376,21 +1536,32 @@ def animate_fields(
 
     Examples
     --------
+    >>> from carto_flow.flow_cartogram.visualization import DensityPlotOptions, VelocityPlotOptions
     >>> # Density field only (default)
-    >>> anim = animate_fields(cartogram, normalize="ratio")
+    >>> anim = animate_fields(cartogram, density=DensityPlotOptions(normalize="ratio"))
 
     >>> # Velocity field only
     >>> anim = animate_fields(cartogram, show_density=False, show_velocity=True)
 
     >>> # Combined: density with velocity overlay
     >>> anim = animate_fields(
-    ...     cartogram, show_velocity=True, normalize="ratio",
-    ...     velocity_color="black", velocity_alpha_by_magnitude=True
+    ...     cartogram, show_velocity=True,
+    ...     density=DensityPlotOptions(normalize="ratio"),
+    ...     velocity=VelocityPlotOptions(color="black", alpha_by_magnitude=True),
     ... )
     """
-    from matplotlib.colors import to_rgba
+    from .visualization import (
+        DensityPlotOptions,
+        VelocityPlotOptions,
+        _compute_quiver_scale,
+        _prepare_density_display,
+        _prepare_velocity_colors,
+        _render_density_on_ax,
+        _resolve_bounds,
+    )
 
-    from .visualization import _prepare_density_display, _prepare_velocity_colors, _resolve_bounds
+    density_opts = density or DensityPlotOptions()
+    velocity_opts = velocity or VelocityPlotOptions(colorbar=False)
 
     if interpolation not in ("nearest", "linear"):
         raise ValueError(f"interpolation must be 'nearest' or 'linear', got {interpolation!r}")
@@ -1487,68 +1658,68 @@ def animate_fields(
     fig, ax = plt.subplots(1, 1, figsize=figsize)
     extent = [grid.xmin, grid.xmax, grid.ymin, grid.ymax]
 
-    # Get target density and area scale for normalization
+    # Get target density for normalization
     target_density = cartogram.target_density
-    area_scale = cartogram.options.area_scale if cartogram.options else 1.0
 
-    # Compute global ranges for density
-    density_vmin, density_vmax, effective_density_cmap = None, None, None
+    # Compute global density ranges using _prepare_density_display per snapshot
+    density_vmin, density_vmax = None, None
     if show_density:
-        if normalize == "difference":
-            all_diffs = []
-            for snap in valid_snapshots:
-                if target_density is not None:
-                    # Scale rho to match target_density units
-                    rho_scaled = snap.rho / area_scale
-                    all_diffs.append(np.abs(rho_scaled - target_density).max())
-            density_vmax = max(all_diffs) if all_diffs else 1.0
-            density_vmin = -density_vmax
-            effective_density_cmap = density_cmap or "RdBu_r"
-        elif normalize == "ratio":
-            all_ratios = []
-            for snap in valid_snapshots:
-                if target_density is not None and target_density > 0:
-                    rho_scaled = snap.rho / area_scale
-                    ratio = rho_scaled / target_density
-                    ratio_clipped = np.clip(ratio, 1e-6, None)
-                    all_ratios.append(np.abs(np.log2(ratio_clipped)).max())
-            max_log = max(all_ratios) if all_ratios else 1.0
-            density_vmin, density_vmax = -max_log, max_log
-            effective_density_cmap = density_cmap or "RdBu_r"
+        if density_opts.normalize is not None:
+            per_snap = [
+                _prepare_density_display(
+                    snap.rho,
+                    target_density,
+                    density_opts.normalize,
+                    clip_percentile=density_opts.clip_percentile,
+                    max_scale=density_opts.max_scale,
+                )
+                for snap in valid_snapshots
+            ]
+            vmins = [r[1] for r in per_snap if r[1] is not None]
+            vmaxes = [r[2] for r in per_snap if r[2] is not None]
+            density_vmin = min(vmins) if vmins else -1.0
+            density_vmax = max(vmaxes) if vmaxes else 1.0
         else:
             all_rho = [snap.rho for snap in valid_snapshots]
             density_vmin = min(r.min() for r in all_rho)
             density_vmax = max(r.max() for r in all_rho)
-            effective_density_cmap = density_cmap or "viridis"
+
+        # opts.vmin/vmax take precedence over computed global limits
+        if density_opts.vmin is not None:
+            density_vmin = density_opts.vmin
+        if density_opts.vmax is not None:
+            density_vmax = density_opts.vmax
 
     # Compute global ranges for velocity
     mag_min, mag_max = 0.0, 1.0
     X_sub, Y_sub = None, None
     if show_velocity:
         X, Y = grid.X, grid.Y
-        X_sub = X[::velocity_skip, ::velocity_skip]
-        Y_sub = Y[::velocity_skip, ::velocity_skip]
+        X_sub = X[:: velocity_opts.skip, :: velocity_opts.skip]
+        Y_sub = Y[:: velocity_opts.skip, :: velocity_opts.skip]
 
         all_mags = []
         for snap in valid_snapshots:
-            vx_sub = snap.vx[::velocity_skip, ::velocity_skip]
-            vy_sub = snap.vy[::velocity_skip, ::velocity_skip]
+            vx_sub = snap.vx[:: velocity_opts.skip, :: velocity_opts.skip]
+            vy_sub = snap.vy[:: velocity_opts.skip, :: velocity_opts.skip]
             mag = np.sqrt(vx_sub**2 + vy_sub**2)
             all_mags.extend([mag.min(), mag.max()])
         mag_min, mag_max = min(all_mags), max(all_mags)
 
-    # Determine velocity colormap
-    if velocity_color_by == "magnitude":
-        effective_velocity_cmap = velocity_cmap or "viridis"
-        velocity_colorbar_label = "Magnitude"
-    elif velocity_color_by == "direction":
-        effective_velocity_cmap = velocity_cmap or "twilight"
-        velocity_colorbar_label = "Direction"
-    else:
-        effective_velocity_cmap = velocity_cmap
-        velocity_colorbar_label = None
+        quiver_kw = {
+            **velocity_opts.quiver_kwargs,
+            **_compute_quiver_scale(
+                mag_max,
+                velocity_opts.skip,
+                grid.dx,
+                velocity_opts.velocity_scale,
+                velocity_opts.ref_magnitude,
+            ),
+        }
 
-    to_rgba(velocity_color, alpha=velocity_alpha)
+    from matplotlib.colors import to_rgba
+
+    to_rgba(velocity_opts.color, alpha=velocity_opts.alpha)
     density_cbar_added = [False]
     velocity_cbar_added = [False]
 
@@ -1556,13 +1727,8 @@ def animate_fields(
         ax.set_aspect("equal")
         return []
 
-    def apply_normalization(rho: np.ndarray) -> tuple[np.ndarray, str]:
-        """Apply density normalization using shared helper."""
-        rho_display, _, _, _, label, _ = _prepare_density_display(rho, target_density, normalize, area_scale=area_scale)
-        return rho_display, label
-
-    def get_frame_data(frame: int) -> tuple[Any, Any, Any, float]:
-        """Get fields for a frame. Returns (rho, vx, vy, iteration)."""
+    def get_frame_data(frame: int) -> tuple[Any, Any, Any, float, float]:
+        """Get fields for a frame. Returns (rho, vx, vy, iteration, t)."""
         progress = frame / max(1, n_frames - 1)
         position = mapper(progress, variables_arrays)
         position = np.clip(position, 0, n_snapshots - 1)
@@ -1579,7 +1745,7 @@ def animate_fields(
             rho = snap.rho if show_density else None
             vx = snap.vx if show_velocity else None
             vy = snap.vy if show_velocity else None
-            return rho, vx, vy, iters[idx]
+            return rho, vx, vy, iters[idx], 0.0
 
         else:  # linear
             if idx_before == idx_after or t <= 0:
@@ -1587,13 +1753,13 @@ def animate_fields(
                 rho = snap.rho if show_density else None
                 vx = snap.vx if show_velocity else None
                 vy = snap.vy if show_velocity else None
-                return rho, vx, vy, iters[idx_before]
+                return rho, vx, vy, iters[idx_before], 0.0
             elif t >= 1:
                 snap = valid_snapshots[idx_after]
                 rho = snap.rho if show_density else None
                 vx = snap.vx if show_velocity else None
                 vy = snap.vy if show_velocity else None
-                return rho, vx, vy, iters[idx_after]
+                return rho, vx, vy, iters[idx_after], 0.0
             else:
                 snap_before = valid_snapshots[idx_before]
                 snap_after = valid_snapshots[idx_after]
@@ -1605,74 +1771,84 @@ def animate_fields(
                     vx = snap_before.vx * (1 - t) + snap_after.vx * t
                     vy = snap_before.vy * (1 - t) + snap_after.vy * t
                 iteration = iters[idx_before] + t * (iters[idx_after] - iters[idx_before])
-                return rho, vx, vy, iteration
+                return rho, vx, vy, iteration, t
 
     def update(frame):
         ax.clear()
-        rho, vx, vy, iteration = get_frame_data(frame)
+        if not show_axes:
+            ax.axis("off")
+        rho, vx, vy, iteration, _t_val = get_frame_data(frame)
 
         # Draw density field
         if show_density and rho is not None:
-            rho_display, label = apply_normalization(rho)
-            im = ax.imshow(
-                rho_display,
-                origin="lower",
-                extent=extent,
-                aspect="equal",
-                cmap=effective_density_cmap,
-                vmin=density_vmin,
-                vmax=density_vmax,
-                alpha=density_alpha,
-                **kwargs,
+            im, label = _render_density_on_ax(
+                ax,
+                rho,
+                target_density,
+                extent,
+                density_opts,
+                override_vmin=density_vmin,
+                override_vmax=density_vmax,
             )
             if not density_cbar_added[0]:
-                plt.colorbar(im, ax=ax, label=label)
+                _cbar_kw = {"label": label, **density_opts.colorbar_kwargs}
+                fig.colorbar(im, ax=ax, **_cbar_kw)
                 density_cbar_added[0] = True
 
         # Draw velocity field
         if show_velocity and vx is not None and vy is not None:
-            vx_sub = vx[::velocity_skip, ::velocity_skip]
-            vy_sub = vy[::velocity_skip, ::velocity_skip]
+            vx_sub = vx[:: velocity_opts.skip, :: velocity_opts.skip]
+            vy_sub = vy[:: velocity_opts.skip, :: velocity_opts.skip]
 
-            # Use shared helper for velocity colors
-            colors, _colorbar_label, _ = _prepare_velocity_colors(
+            colors, _colorbar_label, _vcmap = _prepare_velocity_colors(
                 vx_sub,
                 vy_sub,
-                color_by=velocity_color_by,
-                alpha_by_magnitude=velocity_alpha_by_magnitude,
-                alpha_range=velocity_alpha_range,
-                cmap=effective_velocity_cmap,
-                base_color=velocity_color,
-                base_alpha=velocity_alpha,
+                color_by=velocity_opts.color_by,
+                alpha_by_magnitude=velocity_opts.alpha_by_magnitude,
+                alpha_range=velocity_opts.alpha_range,
+                cmap=velocity_opts.cmap,
+                base_color=velocity_opts.color,
+                base_alpha=velocity_opts.alpha,
                 mag_range=(mag_min, mag_max),
             )
 
-            ax.quiver(X_sub, Y_sub, vx_sub, vy_sub, color=colors, scale=velocity_scale, **(velocity_kwargs or {}))
+            ax.quiver(X_sub, Y_sub, vx_sub, vy_sub, color=colors, **quiver_kw)
 
-            if velocity_colorbar and not velocity_cbar_added[0] and velocity_color_by is not None:
-                sm = plt.cm.ScalarMappable(cmap=effective_velocity_cmap, norm=plt.Normalize(vmin=0, vmax=1))
-                if velocity_color_by == "magnitude":
+            if velocity_opts.colorbar and not velocity_cbar_added[0] and velocity_opts.color_by is not None:
+                sm = plt.cm.ScalarMappable(cmap=_vcmap, norm=plt.Normalize(vmin=0, vmax=1))
+                if velocity_opts.color_by == "magnitude":
                     sm.set_clim(mag_min, mag_max)
-                elif velocity_color_by == "direction":
+                elif velocity_opts.color_by == "direction":
                     sm.set_clim(-np.pi, np.pi)
                 sm.set_array([])
-                fig.colorbar(sm, ax=ax, label=velocity_colorbar_label)
+                _cbar_kw = {"label": _colorbar_label, **velocity_opts.colorbar_kwargs}
+                fig.colorbar(sm, ax=ax, **_cbar_kw)
                 velocity_cbar_added[0] = True
 
         ax.set_aspect("equal")
 
         # Title based on what we're showing
         if show_density and show_velocity:
-            title = "Density + Velocity"
+            _field_label = "Density + Velocity"
         elif show_density:
-            title = "Density Field"
+            _field_label = "Density Field"
         else:
-            title = "Velocity Field"
+            _field_label = "Velocity Field"
 
-        if isinstance(iteration, float) and not float(iteration).is_integer():
-            ax.set_title(f"{title} (iteration {iteration:.1f})")
+        if title is None:
+            if isinstance(iteration, float) and not float(iteration).is_integer():
+                ax.set_title(f"{_field_label} (iteration {iteration:.1f})")
+            else:
+                ax.set_title(f"{_field_label} (iteration {int(iteration)})")
+        elif title:
+            _n_iters = valid_snapshots[-1].iteration if valid_snapshots else float("nan")
+            _t_elapsed = frame * duration / max(1, n_frames - 1)
+            ctx = _SafeFormatDict(
+                iteration=iteration, n_iterations=_n_iters, field=_field_label, t=_t_elapsed, duration=duration
+            )
+            ax.set_title(title.format_map(ctx))
         else:
-            ax.set_title(f"{title} (iteration {int(iteration)})")
+            ax.set_title("")
         ax.set_xlabel("X")
         ax.set_ylabel("Y")
 
@@ -1698,14 +1874,16 @@ def animate_fields(
 
 def animate_density_field(
     cartogram: "Cartogram",
+    *,
     duration: float = 5.0,
     fps: int = 15,
     interpolation: str = "nearest",
     position_mapper: Optional[PositionMapper] = None,
     bounds: Optional[Any] = None,
-    normalize: Optional[str] = None,
+    density: Optional["DensityPlotOptions"] = None,
+    show_axes: bool = True,
+    title: Optional[Union[str, bool]] = None,
     figsize: tuple[float, float] = (10, 8),
-    **kwargs: Any,
 ) -> FuncAnimation:
     """Animate density field evolution. Convenience wrapper for animate_fields.
 
@@ -1720,28 +1898,25 @@ def animate_density_field(
         bounds=bounds,
         show_density=True,
         show_velocity=False,
-        normalize=normalize,
-        density_cmap=kwargs.pop("cmap", None),
+        density=density,
+        show_axes=show_axes,
+        title=title,
         figsize=figsize,
-        **kwargs,
     )
 
 
 def animate_velocity_field(
     cartogram: "Cartogram",
+    *,
     duration: float = 5.0,
     fps: int = 15,
     interpolation: str = "nearest",
     position_mapper: Optional[PositionMapper] = None,
     bounds: Optional[Any] = None,
-    skip: int = 4,
-    color_by: Optional[str] = None,
-    cmap: Optional[str] = None,
-    colorbar: bool = True,
-    alpha_by_magnitude: bool = False,
-    alpha_range: tuple[float, float] = (0.2, 1.0),
+    velocity: Optional["VelocityPlotOptions"] = None,
+    show_axes: bool = True,
+    title: Optional[Union[str, bool]] = None,
     figsize: tuple[float, float] = (10, 8),
-    **kwargs: Any,
 ) -> FuncAnimation:
     """Animate velocity field evolution. Convenience wrapper for animate_fields.
 
@@ -1756,13 +1931,9 @@ def animate_velocity_field(
         bounds=bounds,
         show_density=False,
         show_velocity=True,
-        velocity_skip=skip,
-        velocity_color_by=color_by,
-        velocity_cmap=cmap,
-        velocity_colorbar=colorbar,
-        velocity_alpha_by_magnitude=alpha_by_magnitude,
-        velocity_alpha_range=alpha_range,
-        velocity_kwargs=kwargs,
+        velocity=velocity,
+        show_axes=show_axes,
+        title=title,
         figsize=figsize,
     )
 
@@ -1778,13 +1949,17 @@ def animate_workflow(
     fps: int = 15,
     interpolation: str = "linear",
     hold_at_keyframes: float = 0.5,
-    column: Optional[str] = "_morph_error_pct",
+    color_by: Optional[Union[str, np.ndarray, list]] = "errors_pct",
     cmap: str = "RdYlGn_r",
     vmin: Optional[float] = None,
     vmax: Optional[float] = None,
     colorbar: bool = True,
     colorbar_label: Optional[str] = None,
     show_run_info: bool = True,
+    show_axes: bool = True,
+    colorbar_kwargs: Optional[dict] = None,
+    title: Optional[Union[str, bool]] = None,
+    precompute: bool = True,
     figsize: tuple[float, float] = (10, 8),
     **kwargs: Any,
 ) -> FuncAnimation:
@@ -1805,11 +1980,21 @@ def animate_workflow(
         Interpolation between keyframes: "nearest" or "linear".
     hold_at_keyframes : float, default=0.5
         Seconds to pause at each cartogram's final state.
-    column : str, optional
-        Column for coloring geometries. Special values:
-        - "_morph_error_pct": Per-geometry percentage errors
-        - "_morph_density": Density values
-        If None, no coloring is applied.
+    color_by : str, array, list, or None, default="errors_pct"
+        What to use for coloring geometries. Accepted values:
+
+        - ``"errors_pct"`` (default): per-geometry percentage error from each
+          cartogram's ``get_errors().errors_pct``.
+        - ``"density"``: per-geometry density from each cartogram's
+          ``get_density()``.
+        - ``"original"``: static values from the column used to build the
+          cartogram (requires ``_value_column`` + ``_source_gdf``; set
+          automatically by ``CartogramWorkflow``).
+        - Any other ``str``: column looked up in ``_source_gdf`` for every
+          cartogram (raises ``ValueError`` if not found).
+        - ``np.ndarray``: single array broadcast to every keyframe.
+        - ``list`` of arrays: one array per cartogram in the workflow.
+        - ``None``: no coloring.
     cmap : str, default="RdYlGn_r"
         Colormap for coloring geometries.
     vmin : float, optional
@@ -1819,9 +2004,31 @@ def animate_workflow(
     colorbar : bool, default=True
         Whether to show a colorbar.
     colorbar_label : str, optional
-        Label for the colorbar. Defaults to column name.
+        Label for the colorbar. Auto-set from ``color_by`` if not provided.
     show_run_info : bool, default=True
         Show "Run X/N" in title during animation.
+    show_axes : bool, default=True
+        If False, hides the axes frame, ticks, and labels (``ax.axis("off")``).
+        Useful for clean map-style animations.
+    colorbar_kwargs : dict, optional
+        Additional keyword arguments passed to ``fig.colorbar()``.
+        Example: ``dict(shrink=0.8, pad=0.02)``.
+        The ``"label"`` key overrides the auto-set label.
+    title : str, bool, or None, default=None
+        Controls the axes title each frame.
+
+        - ``None``: auto-title (uses ``show_run_info`` logic).
+        - ``False`` or ``""``: no title.
+        - ``str``: format-string expanded each frame. Available keys:
+          ``{run}`` (0-based keyframe index), ``{n_runs}``,
+          ``{t}`` (elapsed seconds), ``{duration}`` (total seconds),
+          ``{iteration}``, ``{n_iterations}``, ``{mean_error}``,
+          ``{max_error}``, ``{mean_error_pct}``, ``{max_error_pct}``.
+    precompute : bool, default=True
+        If True, all frames are computed before the animation starts.
+        Eliminates per-frame geometry interpolation and GeoDataFrame copying,
+        giving a significant speedup especially for ``interpolation="linear"``.
+        Set to False to reduce peak memory usage for very long animations.
     figsize : tuple, default=(10, 8)
         Figure size (width, height).
     **kwargs
@@ -1839,13 +2046,11 @@ def animate_workflow(
     >>> anim = animate_workflow(workflow, duration=10.0)
     >>> save_animation(anim, "workflow.gif")
 
-    >>> # Color by error percentage with custom colormap
-    >>> anim = animate_workflow(
-    ...     workflow, column="_morph_error_pct", cmap="RdYlGn_r"
-    ... )
+    >>> # Color by density with custom colormap
+    >>> anim = animate_workflow(workflow, color_by="density", cmap="viridis")
 
     >>> # No coloring, just geometry transitions
-    >>> anim = animate_workflow(workflow, column=None)
+    >>> anim = animate_workflow(workflow, color_by=None)
     """
     import geopandas as gpd
 
@@ -1858,6 +2063,11 @@ def animate_workflow(
     # Extract keyframes (final geometry from each cartogram)
     keyframes: list[GeoDataFrame] = []
     color_values: list[Optional[np.ndarray]] = []
+    kf_mean_error: list[float] = []
+    kf_max_error: list[float] = []
+    kf_mean_error_pct: list[float] = []
+    kf_max_error_pct: list[float] = []
+    kf_iterations: list[float] = []
 
     for cartogram in workflow:
         latest = cartogram.latest
@@ -1867,30 +2077,69 @@ def animate_workflow(
         gdf = gpd.GeoDataFrame(geometry=list(latest.geometry))
         keyframes.append(gdf)
 
-        # Extract color values based on column
-        if column == "_morph_error_pct":
-            errors = cartogram.get_errors()
-            if errors is not None:
-                color_values.append(errors.errors_pct)
+        # Collect per-keyframe error scalars for title format context
+        errs = cartogram.get_errors()
+        _nan = float("nan")
+        kf_mean_error.append(errs.mean_log_error if errs else _nan)
+        kf_max_error.append(errs.max_log_error if errs else _nan)
+        kf_mean_error_pct.append(errs.mean_error_pct if errs else _nan)
+        kf_max_error_pct.append(errs.max_error_pct if errs else _nan)
+        kf_iterations.append(float(cartogram.niterations) if hasattr(cartogram, "niterations") else _nan)
+
+        # Extract color values based on color_by
+        if isinstance(color_by, str):
+            if color_by == "errors_pct":
+                _errs = cartogram.get_errors()
+                color_values.append(_errs.errors_pct if _errs else None)
+            elif color_by == "density":
+                color_values.append(cartogram.get_density())
+            elif color_by == "original":
+                _col = getattr(cartogram, "_value_column", None)
+                _src = getattr(cartogram, "_source_gdf", None)
+                if _col and _src is not None and _col in _src.columns:
+                    color_values.append(np.asarray(_src[_col].values))
+                else:
+                    color_values.append(None)
             else:
-                color_values.append(None)
-        elif column == "_morph_density":
-            density = cartogram.get_density()
-            color_values.append(density)
-        elif column is not None:
-            # Try to get from source GeoDataFrame
-            if cartogram._source_gdf is not None and column in cartogram._source_gdf.columns:
-                color_values.append(cartogram._source_gdf[column].values)
-            else:
-                color_values.append(None)
+                _src = getattr(cartogram, "_source_gdf", None)
+                if _src is not None and color_by in _src.columns:
+                    color_values.append(np.asarray(_src[color_by].values))
+                else:
+                    color_values.append(None)
+        elif isinstance(color_by, np.ndarray):
+            color_values.append(np.asarray(color_by))
+        elif isinstance(color_by, list):
+            pass  # handled after loop
         else:
             color_values.append(None)
 
     n_keyframes = len(keyframes)
     n_frames = int(duration * fps)
 
+    # Handle list color_by: validate and assign
+    if isinstance(color_by, list):
+        if len(color_by) != n_keyframes:
+            raise ValueError(
+                f"color_by list length ({len(color_by)}) must match number of workflow cartograms ({n_keyframes})"
+            )
+        color_values = [np.asarray(cv) for cv in color_by]
+
+    # Raise for arbitrary column not found in any cartogram
+    if (
+        isinstance(color_by, str)
+        and color_by not in ("errors_pct", "density", "original")
+        and not any(cv is not None for cv in color_values)
+    ):
+        _available: list = []
+        for _c in workflow:
+            _src2 = getattr(_c, "_source_gdf", None)
+            if _src2 is not None:
+                _available = list(_src2.columns)
+                break
+        raise ValueError(f"Column '{color_by}' not found in source GeoDataFrame. Available: {_available}")
+
     # Compute global color limits
-    use_coloring = column is not None and any(cv is not None for cv in color_values)
+    use_coloring = color_by is not None and any(cv is not None for cv in color_values)
     computed_vmin, computed_vmax = None, None
     if use_coloring:
         valid_colors = [cv for cv in color_values if cv is not None]
@@ -1902,8 +2151,20 @@ def animate_workflow(
     color_vmax = vmax if vmax is not None else computed_vmax
 
     # Determine colorbar label
-    if colorbar_label is None and column is not None:
-        colorbar_label = column
+    resolved_colorbar_label = colorbar_label
+    if resolved_colorbar_label is None and color_by is not None:
+        if color_by == "errors_pct":
+            resolved_colorbar_label = "Error %"
+        elif color_by == "density":
+            resolved_colorbar_label = "Density"
+        elif color_by == "original":
+            for _c in workflow:
+                _col2 = getattr(_c, "_value_column", None)
+                if _col2:
+                    resolved_colorbar_label = _col2
+                    break
+        elif isinstance(color_by, str):
+            resolved_colorbar_label = color_by
 
     # Compute timing with hold at keyframes
     # Total time = hold_time * n_keyframes + transition_time * (n_keyframes - 1)
@@ -2000,43 +2261,92 @@ def animate_workflow(
 
                 return gdf, keyframe_idx, actual_t, colors
 
+    # Pre-compute all frames to avoid per-frame interpolation and GeoDataFrame copying
+    if precompute:
+        _precomputed: list = []
+        for _f in range(n_frames):
+            _gdf, _keyframe_idx, _t, _colors = get_frame_data(_f)
+            if use_coloring and _colors is not None and color_vmin is not None:
+                _plot_gdf = _gdf.assign(_plot_color=_colors)
+                _has_colors = True
+            else:
+                _plot_gdf = _gdf
+                _has_colors = False
+            _precomputed.append((_plot_gdf, _keyframe_idx, _t, _has_colors))
+
     def update(frame):
         ax.clear()
-        gdf, keyframe_idx, t, colors = get_frame_data(frame)
+        if not show_axes:
+            ax.axis("off")
+
+        if precompute:
+            plot_gdf, keyframe_idx, t, _has_colors = _precomputed[frame]
+        else:
+            _gdf, keyframe_idx, t, _colors = get_frame_data(frame)
+            if use_coloring and _colors is not None and color_vmin is not None:
+                plot_gdf = _gdf.assign(_plot_color=_colors)
+                _has_colors = True
+            else:
+                plot_gdf = _gdf
+                _has_colors = False
 
         # Determine how to plot
-        if use_coloring and colors is not None and color_vmin is not None:
-            plot_gdf = gdf.copy()
-            plot_gdf["_plot_color"] = colors
+        if use_coloring and _has_colors and color_vmin is not None:
             plot_gdf.plot(
                 ax=ax, column="_plot_color", legend=False, vmin=color_vmin, vmax=color_vmax, cmap=cmap, **kwargs
             )
         else:
-            gdf.plot(ax=ax, **kwargs)
+            plot_gdf.plot(ax=ax, **kwargs)
 
         # Add colorbar on first frame if requested
         if colorbar and not cbar_added[0] and use_coloring and color_vmin is not None:
             sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=color_vmin, vmax=color_vmax))
             sm.set_array([])
-            fig.colorbar(sm, ax=ax, label=colorbar_label)
+            _cbar_kw = {"label": resolved_colorbar_label, **(colorbar_kwargs or {})}
+            fig.colorbar(sm, ax=ax, **_cbar_kw)
             cbar_added[0] = True
 
         ax.set_xlim(xmin, xmax)
         ax.set_ylim(ymin, ymax)
         ax.set_aspect("equal")
 
-        # Build title
-        if show_run_info:
-            if t == 0.0:
-                title = f"Run {keyframe_idx}/{n_keyframes - 1}"
-                if keyframe_idx == 0:
-                    title = "Original"
-            else:
-                title = f"Run {keyframe_idx} → {keyframe_idx + 1} ({t:.0%})"
-        else:
-            title = "Cartogram Workflow"
+        def _interp_kf(arr: list, i: int, frac: float) -> float:
+            if not arr:
+                return float("nan")
+            if i >= len(arr) - 1:
+                return arr[min(i, len(arr) - 1)]
+            return arr[i] * (1 - frac) + arr[i + 1] * frac
 
-        ax.set_title(title)
+        # Build title
+        if title is None:
+            if show_run_info:
+                if t == 0.0:
+                    _auto_title = f"Run {keyframe_idx}/{n_keyframes - 1}"
+                    if keyframe_idx == 0:
+                        _auto_title = "Original"
+                else:
+                    _auto_title = f"Run {keyframe_idx} → {keyframe_idx + 1} ({t:.0%})"
+            else:
+                _auto_title = "Cartogram Workflow"
+            ax.set_title(_auto_title)
+        elif title:
+            _t_elapsed = frame * duration / max(1, n_frames - 1)
+            _n_iters = sum(i for i in kf_iterations if not np.isnan(i))
+            ctx = _SafeFormatDict(
+                run=keyframe_idx,
+                n_runs=n_keyframes,
+                t=_t_elapsed,
+                duration=duration,
+                iteration=_interp_kf(kf_iterations, keyframe_idx, t),
+                n_iterations=_n_iters,
+                mean_error=_interp_kf(kf_mean_error, keyframe_idx, t),
+                max_error=_interp_kf(kf_max_error, keyframe_idx, t),
+                mean_error_pct=_interp_kf(kf_mean_error_pct, keyframe_idx, t),
+                max_error_pct=_interp_kf(kf_max_error_pct, keyframe_idx, t),
+            )
+            ax.set_title(title.format_map(ctx))
+        else:
+            ax.set_title("")
         return []
 
     anim = FuncAnimation(
@@ -2053,27 +2363,18 @@ def animate_workflow(
 
 def animate_workflow_fields(
     workflow: "CartogramWorkflow",
+    *,
     duration: float = 8.0,
     fps: int = 15,
     interpolation: str = "nearest",
     bounds: Optional[Any] = None,
     show_density: bool = True,
     show_velocity: bool = False,
-    normalize: Optional[str] = "ratio",
-    density_cmap: Optional[str] = None,
-    density_alpha: float = 1.0,
-    velocity_skip: int = 4,
-    velocity_color: str = "white",
-    velocity_alpha: float = 0.8,
-    velocity_scale: Optional[float] = None,
-    velocity_color_by: Optional[str] = None,
-    velocity_cmap: Optional[str] = None,
-    velocity_colorbar: bool = False,
-    velocity_alpha_by_magnitude: bool = False,
-    velocity_alpha_range: tuple[float, float] = (0.2, 1.0),
-    velocity_kwargs: Optional[dict[str, Any]] = None,
+    density: Optional["DensityPlotOptions"] = None,
+    velocity: Optional["VelocityPlotOptions"] = None,
+    show_axes: bool = True,
+    title: Optional[Union[str, bool]] = None,
     figsize: tuple[float, float] = (10, 8),
-    **kwargs: Any,
 ) -> FuncAnimation:
     """Animate density and/or velocity fields across all cartograms in a workflow.
 
@@ -2098,36 +2399,26 @@ def animate_workflow_fields(
         Whether to show density field heatmap.
     show_velocity : bool, default=False
         Whether to show velocity field arrows.
-    normalize : str, default="ratio"
-        Density normalization: None, "difference", or "ratio".
-    density_cmap : str, optional
-        Colormap for density field.
-    density_alpha : float, default=1.0
-        Alpha for density heatmap.
-    velocity_skip : int, default=4
-        Plot every nth velocity arrow.
-    velocity_color : str, default="white"
-        Color for velocity arrows.
-    velocity_alpha : float, default=0.8
-        Alpha for velocity arrows.
-    velocity_scale : float, optional
-        Scale factor for arrow lengths.
-    velocity_color_by : str, optional
-        Color arrows by: None, "magnitude", or "direction".
-    velocity_cmap : str, optional
-        Colormap for velocity coloring.
-    velocity_colorbar : bool, default=False
-        Whether to show colorbar for velocity.
-    velocity_alpha_by_magnitude : bool, default=False
-        If True, arrow transparency varies with magnitude.
-    velocity_alpha_range : tuple, default=(0.2, 1.0)
-        Min and max alpha when velocity_alpha_by_magnitude is True.
-    velocity_kwargs : dict, optional
-        Additional arguments passed to quiver.
+    density : DensityPlotOptions, optional
+        Rendering options for the density field. Defaults to
+        ``DensityPlotOptions(normalize="ratio")`` for workflow animations.
+        See :class:`~carto_flow.flow_cartogram.visualization.DensityPlotOptions`.
+    velocity : VelocityPlotOptions, optional
+        Rendering options for the velocity field.
+        See :class:`~carto_flow.flow_cartogram.visualization.VelocityPlotOptions`.
+    show_axes : bool, default=True
+        If False, hides the axes frame, ticks, and labels (``ax.axis("off")``).
+        Useful for clean map-style animations.
+    title : str, bool, or None, default=None
+        Controls the axes title each frame.
+
+        - ``None``: auto-title ("Density Field (Run X/N, iter Y)").
+        - ``False`` or ``""``: no title.
+        - ``str``: format-string expanded each frame. Available keys:
+          ``{iteration}``, ``{run}`` (0-based), ``{n_runs}``,
+          ``{field}`` (e.g. "Density Field"), ``{t}``.
     figsize : tuple, default=(10, 8)
         Figure size (width, height).
-    **kwargs
-        Additional arguments passed to imshow.
 
     Returns
     -------
@@ -2136,21 +2427,33 @@ def animate_workflow_fields(
 
     Examples
     --------
+    >>> from carto_flow.flow_cartogram.visualization import DensityPlotOptions, VelocityPlotOptions
     >>> workflow = CartogramWorkflow(gdf, 'population')
     >>> workflow.morph(options=MorphOptions(save_internals=True))
     >>> workflow.morph(options=MorphOptions(save_internals=True))
-    >>> anim = animate_workflow_fields(workflow, normalize="ratio")
+    >>> anim = animate_workflow_fields(workflow, density=DensityPlotOptions(normalize="ratio"))
     >>> save_animation(anim, "workflow_fields.gif")
 
     >>> # Show velocity overlaid on density
     >>> anim = animate_workflow_fields(
-    ...     workflow, show_velocity=True, normalize="ratio",
-    ...     velocity_color="black", velocity_alpha_by_magnitude=True
+    ...     workflow, show_velocity=True,
+    ...     density=DensityPlotOptions(normalize="ratio"),
+    ...     velocity=VelocityPlotOptions(color="black", alpha_by_magnitude=True),
     ... )
     """
-    from matplotlib.colors import to_rgba
+    from .visualization import (
+        DensityPlotOptions,
+        VelocityPlotOptions,
+        _compute_quiver_scale,
+        _prepare_density_display,
+        _prepare_velocity_colors,
+        _render_density_on_ax,
+        _resolve_bounds,
+    )
 
-    from .visualization import _prepare_density_display, _prepare_velocity_colors, _resolve_bounds
+    # Default: ratio normalization for workflow animations
+    density_opts = density if density is not None else DensityPlotOptions(normalize="ratio")
+    velocity_opts = velocity or VelocityPlotOptions(colorbar=False)
 
     if interpolation not in ("nearest", "linear"):
         raise ValueError(f"interpolation must be 'nearest' or 'linear', got {interpolation!r}")
@@ -2226,9 +2529,9 @@ def animate_workflow_fields(
     mapper = _default_position_mapper
 
     # Compute global density/velocity ranges across all runs
-    density_vmin, density_vmax, effective_density_cmap = None, None, None
+    density_vmin, density_vmax = None, None
     if show_density:
-        # Get first cartogram's target_density and area_scale for normalization
+        # Get first cartogram's target_density for normalization
         first_morphed = None
         for cartogram in workflow:
             if cartogram.target_density is not None:
@@ -2236,59 +2539,52 @@ def animate_workflow_fields(
                 break
 
         target_density = first_morphed.target_density if first_morphed else None
-        area_scale = first_morphed.options.area_scale if first_morphed and first_morphed.options else 1.0
 
-        if normalize == "difference":
-            all_diffs = []
-            for _, _, snap, _ in all_snapshots:
-                if target_density is not None:
-                    rho_scaled = snap.rho / area_scale
-                    all_diffs.append(np.abs(rho_scaled - target_density).max())
-            density_vmax = max(all_diffs) if all_diffs else 1.0
-            density_vmin = -density_vmax
-            effective_density_cmap = density_cmap or "RdBu_r"
-        elif normalize == "ratio":
-            all_ratios = []
-            for _, _, snap, _ in all_snapshots:
-                if target_density is not None and target_density > 0:
-                    rho_scaled = snap.rho / area_scale
-                    ratio = rho_scaled / target_density
-                    ratio_clipped = np.clip(ratio, 1e-6, None)
-                    all_ratios.append(np.abs(np.log2(ratio_clipped)).max())
-            max_log = max(all_ratios) if all_ratios else 1.0
-            density_vmin, density_vmax = -max_log, max_log
-            effective_density_cmap = density_cmap or "RdBu_r"
+        if density_opts.normalize is not None:
+            per_snap = [
+                _prepare_density_display(
+                    snap[2].rho,
+                    target_density,
+                    density_opts.normalize,
+                    clip_percentile=density_opts.clip_percentile,
+                    max_scale=density_opts.max_scale,
+                )
+                for snap in all_snapshots
+            ]
+            vmins = [r[1] for r in per_snap if r[1] is not None]
+            vmaxes = [r[2] for r in per_snap if r[2] is not None]
+            density_vmin = min(vmins) if vmins else -1.0
+            density_vmax = max(vmaxes) if vmaxes else 1.0
         else:
             all_rho = [snap[2].rho for snap in all_snapshots]
             density_vmin = min(r.min() for r in all_rho)
             density_vmax = max(r.max() for r in all_rho)
-            effective_density_cmap = density_cmap or "viridis"
+
+        # opts.vmin/vmax take precedence over computed global limits
+        if density_opts.vmin is not None:
+            density_vmin = density_opts.vmin
+        if density_opts.vmax is not None:
+            density_vmax = density_opts.vmax
 
     # Compute global velocity magnitude range
     mag_min, mag_max = 0.0, 1.0
     if show_velocity:
         all_mags = []
         for _, _, snap, _ in all_snapshots:
-            vx_sub = snap.vx[::velocity_skip, ::velocity_skip]
-            vy_sub = snap.vy[::velocity_skip, ::velocity_skip]
+            vx_sub = snap.vx[:: velocity_opts.skip, :: velocity_opts.skip]
+            vy_sub = snap.vy[:: velocity_opts.skip, :: velocity_opts.skip]
             mag = np.sqrt(vx_sub**2 + vy_sub**2)
             all_mags.extend([mag.min(), mag.max()])
         mag_min, mag_max = min(all_mags), max(all_mags)
 
-    # Determine velocity colormap
-    if velocity_color_by == "magnitude":
-        effective_velocity_cmap = velocity_cmap or "viridis"
-        velocity_colorbar_label = "Magnitude"
-    elif velocity_color_by == "direction":
-        effective_velocity_cmap = velocity_cmap or "twilight"
-        velocity_colorbar_label = "Direction"
-    else:
-        effective_velocity_cmap = velocity_cmap
-        velocity_colorbar_label = None
+    from matplotlib.colors import to_rgba
 
-    to_rgba(velocity_color, alpha=velocity_alpha)
+    to_rgba(velocity_opts.color, alpha=velocity_opts.alpha)
     density_cbar_added = [False]
     velocity_cbar_added = [False]
+
+    # Compute n_runs once (used for title format context)
+    n_runs = max(snap[0] for snap in all_snapshots) + 1
 
     # Set up figure
     fig, ax = plt.subplots(1, 1, figsize=figsize)
@@ -2297,13 +2593,8 @@ def animate_workflow_fields(
         ax.set_aspect("equal")
         return []
 
-    def apply_normalization(rho: np.ndarray) -> tuple[np.ndarray, str]:
-        """Apply density normalization."""
-        rho_display, _, _, _, label, _ = _prepare_density_display(rho, target_density, normalize, area_scale=area_scale)
-        return rho_display, label
-
-    def get_frame_data(frame: int) -> tuple[int, Any, Any, int]:
-        """Get snapshot data for a frame. Returns (run_idx, grid, snapshot, iteration)."""
+    def get_frame_data(frame: int) -> tuple[int, Any, Any, int, float]:
+        """Get snapshot data for a frame. Returns (run_idx, grid, snapshot, iteration, t)."""
         progress = frame / max(1, n_frames - 1)
         position = mapper(progress, variables_arrays)
         position = np.clip(position, 0, n_snapshots - 1)
@@ -2314,88 +2605,115 @@ def animate_workflow_fields(
 
         if interpolation == "nearest":
             idx = idx_before if t < 0.5 else idx_after
-            return all_snapshots[idx]
+            return (*all_snapshots[idx], 0.0)
 
         else:  # linear
             if idx_before == idx_after or t <= 0:
-                return all_snapshots[idx_before]
+                return (*all_snapshots[idx_before], 0.0)
             elif t >= 1:
-                return all_snapshots[idx_after]
+                return (*all_snapshots[idx_after], 0.0)
             else:
                 # For simplicity, use nearest for linear mode too
                 # (interpolating between different grid sizes is complex)
                 idx = idx_before if t < 0.5 else idx_after
-                return all_snapshots[idx]
+                return (*all_snapshots[idx], t)
 
     def update(frame):
         ax.clear()
-        run_idx, grid, snap, _cum_iter = get_frame_data(frame)
+        if not show_axes:
+            ax.axis("off")
+        run_idx, grid, snap, _cum_iter, _t_val = get_frame_data(frame)
 
         extent = [grid.xmin, grid.xmax, grid.ymin, grid.ymax]
 
         # Draw density field
         if show_density and snap.rho is not None:
-            rho_display, label = apply_normalization(snap.rho)
-            im = ax.imshow(
-                rho_display,
-                origin="lower",
-                extent=extent,
-                aspect="equal",
-                cmap=effective_density_cmap,
-                vmin=density_vmin,
-                vmax=density_vmax,
-                alpha=density_alpha,
-                **kwargs,
+            im, label = _render_density_on_ax(
+                ax,
+                snap.rho,
+                target_density,
+                extent,
+                density_opts,
+                override_vmin=density_vmin,
+                override_vmax=density_vmax,
             )
             if not density_cbar_added[0]:
-                plt.colorbar(im, ax=ax, label=label)
+                _cbar_kw = {"label": label, **density_opts.colorbar_kwargs}
+                fig.colorbar(im, ax=ax, **_cbar_kw)
                 density_cbar_added[0] = True
 
         # Draw velocity field
         if show_velocity and snap.vx is not None and snap.vy is not None:
             X, Y = grid.X, grid.Y
-            X_sub = X[::velocity_skip, ::velocity_skip]
-            Y_sub = Y[::velocity_skip, ::velocity_skip]
-            vx_sub = snap.vx[::velocity_skip, ::velocity_skip]
-            vy_sub = snap.vy[::velocity_skip, ::velocity_skip]
+            X_sub = X[:: velocity_opts.skip, :: velocity_opts.skip]
+            Y_sub = Y[:: velocity_opts.skip, :: velocity_opts.skip]
+            vx_sub = snap.vx[:: velocity_opts.skip, :: velocity_opts.skip]
+            vy_sub = snap.vy[:: velocity_opts.skip, :: velocity_opts.skip]
 
-            colors, _colorbar_label, _ = _prepare_velocity_colors(
+            colors, _colorbar_label, _vcmap = _prepare_velocity_colors(
                 vx_sub,
                 vy_sub,
-                color_by=velocity_color_by,
-                alpha_by_magnitude=velocity_alpha_by_magnitude,
-                alpha_range=velocity_alpha_range,
-                cmap=effective_velocity_cmap,
-                base_color=velocity_color,
-                base_alpha=velocity_alpha,
+                color_by=velocity_opts.color_by,
+                alpha_by_magnitude=velocity_opts.alpha_by_magnitude,
+                alpha_range=velocity_opts.alpha_range,
+                cmap=velocity_opts.cmap,
+                base_color=velocity_opts.color,
+                base_alpha=velocity_opts.alpha,
                 mag_range=(mag_min, mag_max),
             )
 
-            ax.quiver(X_sub, Y_sub, vx_sub, vy_sub, color=colors, scale=velocity_scale, **(velocity_kwargs or {}))
+            # Quiver scale uses per-frame grid.dx (grid changes across runs)
+            quiver_kw = {
+                **velocity_opts.quiver_kwargs,
+                **_compute_quiver_scale(
+                    mag_max,
+                    velocity_opts.skip,
+                    grid.dx,
+                    velocity_opts.velocity_scale,
+                    velocity_opts.ref_magnitude,
+                ),
+            }
 
-            if velocity_colorbar and not velocity_cbar_added[0] and velocity_color_by is not None:
-                sm = plt.cm.ScalarMappable(cmap=effective_velocity_cmap, norm=plt.Normalize(vmin=0, vmax=1))
-                if velocity_color_by == "magnitude":
+            ax.quiver(X_sub, Y_sub, vx_sub, vy_sub, color=colors, **quiver_kw)
+
+            if velocity_opts.colorbar and not velocity_cbar_added[0] and velocity_opts.color_by is not None:
+                sm = plt.cm.ScalarMappable(cmap=_vcmap, norm=plt.Normalize(vmin=0, vmax=1))
+                if velocity_opts.color_by == "magnitude":
                     sm.set_clim(mag_min, mag_max)
-                elif velocity_color_by == "direction":
+                elif velocity_opts.color_by == "direction":
                     sm.set_clim(-np.pi, np.pi)
                 sm.set_array([])
-                fig.colorbar(sm, ax=ax, label=velocity_colorbar_label)
+                _cbar_kw = {"label": _colorbar_label, **velocity_opts.colorbar_kwargs}
+                fig.colorbar(sm, ax=ax, **_cbar_kw)
                 velocity_cbar_added[0] = True
 
         ax.set_aspect("equal")
 
         # Title with run info
-        n_runs = max(snap[0] for snap in all_snapshots) + 1
         if show_density and show_velocity:
-            field_type = "Density + Velocity"
+            _field_label = "Density + Velocity"
         elif show_density:
-            field_type = "Density Field"
+            _field_label = "Density Field"
         else:
-            field_type = "Velocity Field"
+            _field_label = "Velocity Field"
 
-        title = f"{field_type} (Run {run_idx}/{n_runs - 1}, iter {snap.iteration})"
-        ax.set_title(title)
+        if title is None:
+            ax.set_title(f"{_field_label} (Run {run_idx}/{n_runs - 1}, iter {snap.iteration})")
+        elif title:
+            _n_iters = all_snapshots[-1][3] if all_snapshots else float("nan")
+            _t_elapsed = frame * duration / max(1, n_frames - 1)
+            ctx = _SafeFormatDict(
+                iteration=snap.iteration,
+                n_iterations=_n_iters,
+                run=run_idx,
+                n_runs=n_runs,
+                field=_field_label,
+                t=_t_elapsed,
+                duration=duration,
+            )
+            ax.set_title(title.format_map(ctx))
+        else:
+            ax.set_title("")
         ax.set_xlabel("X")
         ax.set_ylabel("Y")
 
