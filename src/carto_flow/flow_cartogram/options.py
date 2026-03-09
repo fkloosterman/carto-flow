@@ -25,11 +25,11 @@ Examples
 
 from dataclasses import dataclass, replace
 from enum import Enum
-from typing import TYPE_CHECKING, Callable, Optional, Union
-
-import numpy as np
+from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
+    from .anisotropy import VelocityModulator
+    from .density import DensityModulator
     from .grid import Grid
 
 __all__ = [
@@ -128,12 +128,11 @@ class MorphOptions:
 
     # Grid construction parameters
     grid: Optional["Grid"] = None  # For advanced users
-    grid_size: Union[int, tuple[Optional[int], Optional[int]], None] = 256
+    grid_size: int | tuple[Optional[int], Optional[int]] | None = 256
     grid_margin: float = 0.5
     grid_square: bool = False
 
     # Computation options
-    density_smooth: Optional[float] = None
     dt: float = 0.2
     n_iter: int = 500
     recompute_every: Optional[int] = 10
@@ -142,15 +141,25 @@ class MorphOptions:
     max_tol: float = 0.10  # Percentage tolerance, e.g., 0.10 = 10%
 
     # Anisotropy options
-    Dx: float = 1.0
-    Dy: float = 1.0
-    anisotropy: Optional[Callable[["Grid"], tuple[np.ndarray, np.ndarray]]] = None
-
-    # Smoothing options
-    vsmooth: Optional[float] = None
+    Dx: float = 1.0  # Flow amplification in x: higher = stronger horizontal flow
+    Dy: float = 1.0  # Flow amplification in y: higher = stronger vertical flow
+    anisotropy: Optional["VelocityModulator"] = None
+    density_mod: "DensityModulator" = None
 
     # Unit scaling options
     area_scale: float = 1.0  # Multiplier for area values (e.g., 1e6 to convert m² to km²)
+
+    prescale_components: bool = False
+    """Pre-scale each connected component to its target total area before morphing.
+
+    When True, the algorithm detects groups of adjacent geometries (connected
+    components) and uniformly scales each group so its total area equals the
+    area implied by the global target density. This reduces distortion of the outer boundary
+    during morphing, especially for maps with multiple disconnected regions (e.g.,
+    archipelagos, separate land masses). By pre-scaling components to their target areas,
+    the algorithm can focus on redistributing density within each component rather than
+    applying large global transformations that can excessively distort the outer boundary.
+    """
 
     # Output options
     save_internals: bool = False
@@ -273,7 +282,6 @@ class MorphOptions:
             "grid_size",
             "grid_margin",
             "grid_square",
-            "density_smooth",
             "dt",
             "n_iter",
             "recompute_every",
@@ -283,11 +291,12 @@ class MorphOptions:
             "Dx",
             "Dy",
             "anisotropy",
-            "vsmooth",
+            "density_mod",
             "area_scale",
             "save_internals",
             "show_progress",
             "progress_message",
+            "prescale_components",
         ]
 
         for field_name in field_names:
@@ -311,9 +320,6 @@ class MorphOptions:
                 return "grid_square must be a boolean"
 
         # Computation parameters
-        elif field_name == "density_smooth":
-            if value is not None and (not isinstance(value, (int, float)) or value <= 0):
-                return "density_smooth must be a positive number"
         elif field_name == "dt":
             if not isinstance(value, (int, float)) or value <= 0 or value > 1.0:
                 return "dt must be > 0 and <= 1.0"
@@ -347,13 +353,18 @@ class MorphOptions:
             if not isinstance(value, (int, float)) or value <= 0:
                 return "Dy must be a positive number"
         elif field_name == "anisotropy":
-            if value is not None and not callable(value):
-                return "anisotropy must be a callable function or None"
+            if value is not None:
+                from .anisotropy import VelocityModulator
 
-        # Smoothing parameters
-        elif field_name == "vsmooth":
-            if value is not None and (not isinstance(value, (int, float)) or value < 0):
-                return "vsmooth must be a non-negative number"
+                if not isinstance(value, VelocityModulator):
+                    return "anisotropy must be a VelocityModulator instance or None"
+
+        elif field_name == "density_mod":
+            if value is not None:
+                from .density import DensityModulator
+
+                if not isinstance(value, DensityModulator):
+                    return "density_mod must be a DensityModulator instance or None"
 
         # Unit scaling parameters
         elif field_name == "area_scale":
@@ -370,6 +381,10 @@ class MorphOptions:
         elif field_name == "progress_message" and value is not None and not isinstance(value, str):
             return "progress_message must be a string or None"
 
+        # Outer-boundary distortion reduction options
+        elif field_name == "prescale_components" and not isinstance(value, bool):
+            return "prescale_components must be a boolean"
+
         return ""  # No errors
 
     def _validate_consistency(self) -> list[str]:
@@ -382,7 +397,7 @@ class MorphOptions:
 
         # Anisotropy consistency
         if self.anisotropy is not None and (self.Dx != 1.0 or self.Dy != 1.0):
-            errors.append("cannot combine anisotropy function with Dx/Dy != 1.0")
+            errors.append("cannot combine anisotropy modulator with Dx/Dy != 1.0")
 
         return errors
 

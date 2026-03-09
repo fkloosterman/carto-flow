@@ -26,14 +26,13 @@ from typing import Optional
 
 import numpy as np
 import tqdm
-from scipy.ndimage import gaussian_filter
 
-from ..optimizations.geometry import (
+from ..geo_utils.geometry import (
     reconstruct_geometries,
     unpack_geometries,
 )
 from .cartogram import Cartogram
-from .density import compute_density_field_from_geometries
+from .density import DensityModulator, compute_density_field_from_geometries
 from .displacement import displace_coords_numba
 from .errors import compute_error_metrics
 from .history import (
@@ -317,6 +316,12 @@ def morph_geometries(
         unscaled_target_density = target_density * options.area_scale
     target_areas = values_array / unscaled_target_density
 
+    # PRE-SCALING (Feature 1 — remove this block to disable)
+    if options.prescale_components:
+        from .prescale import prescale_connected_components
+
+        geometries = list(prescale_connected_components(geometries, values_array, unscaled_target_density))
+
     # 4. Initialize algorithm state
     flat_geoms = unpack_geometries(geometries)
     # Resolve grid using options
@@ -357,80 +362,81 @@ def morph_geometries(
     for step in pbar:
         # 1. Compute density field
         if (options.recompute_every is not None and step % options.recompute_every == 0) or step == 0:
-            # Compute density field directly from geometries (no dataframe dependency)
+            # 1a. Compute density field directly from geometries (no dataframe dependency)
             current_geoms = reconstruct_geometries(flat_geoms)
-            if options.save_internals:
-                rho, outside_mask = compute_density_field_from_geometries(
-                    current_geoms,
-                    values,
-                    grid,
-                    unscaled_target_density,
-                    options.density_smooth,
-                    return_outside_mask=True,
-                )
-            else:
-                rho = compute_density_field_from_geometries(
-                    current_geoms, values, grid, unscaled_target_density, options.density_smooth
-                )
-                outside_mask = None
+            rho, geom_mask = compute_density_field_from_geometries(
+                current_geoms,
+                values,
+                grid,
+                unscaled_target_density,
+                return_geometry_mask=True,
+            )
+            rho /= options.area_scale  # convert to display units (values / display-area)
 
-            # 2. Compute baseline velocity field
+            # 1b. Optional density modulation (e.g., border extension)
+            if isinstance(options.density_mod, DensityModulator):
+                rho = options.density_mod(rho, grid, geom_mask, target_density)
+
+            # 1c. Compute baseline velocity field
             vx, vy = velocity_computer.compute(rho)
 
-            # 3. Velocity modulation
-            if options.anisotropy is not None:
-                fx, fy = options.anisotropy(grid)
-                vx_mod = vx * fx
-                vy_mod = vy * fy
-            else:
-                vx_mod, vy_mod = vx, vy
-
-            # 4. Normalize for stability
-            vmax = np.nanmax(np.sqrt(vx_mod**2 + vy_mod**2))
+            # 1d. Normalize for stability
+            vmax = np.nanmax(np.sqrt(vx**2 + vy**2))
             if vmax > 1e-12:
-                vx_mod /= vmax
-                vy_mod /= vmax
+                vx /= vmax
+                vy /= vmax
 
-            # Smooth velocity
-            if options.vsmooth is not None and options.vsmooth > 0.0:
-                vx_mod = gaussian_filter(vx_mod, sigma=options.vsmooth, mode="reflect")
-                vy_mod = gaussian_filter(vy_mod, sigma=options.vsmooth, mode="reflect")
+            if step == 0:
+                vmax_initial = vmax
 
+            vmax_scale = vmax / vmax_initial if vmax_initial > 1e-12 else 1.0
+
+            # 1d. Optional velocity modulation + re-normalize
+            if options.anisotropy is not None:
+                vx, vy = options.anisotropy(vx, vy, grid, geom_mask)
+                vmax = np.nanmax(np.sqrt(vx**2 + vy**2))
+                if vmax > 1e-12:
+                    vx /= vmax
+                    vy /= vmax
+
+            vx *= vmax_scale
+            vy *= vmax_scale
+
+            # 1f. Cache internal state if requested
             if options.save_internals:
                 snapshot = CartogramInternalsSnapshot(
                     iteration=step + 1,
                     rho=rho.copy(),
                     vx=vx.copy(),
                     vy=vy.copy(),
-                    vx_mod=vx_mod.copy() if options.anisotropy is not None else None,
-                    vy_mod=vy_mod.copy() if options.anisotropy is not None else None,
-                    # target_density=target_density,
-                    outside_mask=outside_mask.copy() if outside_mask is not None else None,
+                    geometry_mask=geom_mask.copy(),
                 )
                 internals.add_snapshot(snapshot)
 
-        # 5. Displace geometries
-        max_v = max(np.max(np.abs(vx_mod)), np.max(np.abs(vy_mod)), 1e-8)
+        # 2. Displace geometries
+        max_v = max(np.max(np.abs(vx)), np.max(np.abs(vy)), 1e-8)
         dt_prime = options.dt * min(grid.dx, grid.dy) / max_v
 
+        # 2a. Displace geometry coordinates using the velocity field
         flat_geoms.coords = displace_coords_numba(
-            flat_geoms.coords, grid.x_coords, grid.y_coords, vx_mod, vy_mod, dt_prime, grid.dx, grid.dy
+            flat_geoms.coords, grid.x_coords, grid.y_coords, vx, vy, dt_prime, grid.dx, grid.dy
         )
         flat_geoms.invalidate_cache()
 
+        # 2b. Displace landmarks if provided (using same velocity field)
         if landmarks is not None:
             flat_landmarks_geoms.coords = displace_coords_numba(
-                flat_landmarks_geoms.coords, grid.x_coords, grid.y_coords, vx_mod, vy_mod, dt_prime, grid.dx, grid.dy
+                flat_landmarks_geoms.coords, grid.x_coords, grid.y_coords, vx, vy, dt_prime, grid.dx, grid.dy
             )
             # no need to invalidate cache, because we do not compute the areas
 
-        # Displace displacement field coordinates
+        # 2c. Displace displacement field coordinates
         if flat_coords is not None:
             flat_coords[:] = displace_coords_numba(
-                flat_coords, grid.x_coords, grid.y_coords, vx_mod, vy_mod, dt_prime, grid.dx, grid.dy
+                flat_coords, grid.x_coords, grid.y_coords, vx, vy, dt_prime, grid.dx, grid.dy
             )
 
-        # 6. Convergence stats
+        # 3. Convergence stats
         current_areas = flat_geoms.compute_areas(use_parallel=True)
 
         # Compute error metrics using the structured MorphErrors object
@@ -460,7 +466,7 @@ def morph_geometries(
             else MorphStatus.RUNNING
         )
 
-        # 7. Create snapshot data at appropriate iterations
+        # 4. Create snapshot data at appropriate iterations
         # We save snapshots at the final iteration (when the algorithm has converged, stalled, or reached the maximum number
         # of iterations), or at user-defined intervals.
         if (
@@ -481,7 +487,7 @@ def morph_geometries(
             )
             snapshots.add_snapshot(snapshot_data)
 
-        # Display progress using structured error metrics
+        # 5. Display progress using structured error metrics
         pbar.set_postfix_str(
             f"max={error_metrics.max_error_pct:.1f}%, mean={error_metrics.mean_error_pct:.1f}% - {status.value}"
         )
@@ -491,7 +497,7 @@ def morph_geometries(
             pbar.close()
             break
 
-    # 8. Return final geometries and snapshot data
+    # Return final geometries and snapshot data
     # Finalize convergence history (convert to arrays, free list memory)
     convergence.finalize()
 

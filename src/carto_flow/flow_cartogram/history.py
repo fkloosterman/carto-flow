@@ -166,25 +166,22 @@ class CartogramInternalsSnapshot(BaseSnapshot):
     rho : Optional[np.ndarray]
         Density field array.
     vx : Optional[np.ndarray]
-        X-component of velocity field.
+        X-component of the effective velocity field used for displacement
+        (after any anisotropy modulation and smoothing).
     vy : Optional[np.ndarray]
-        Y-component of velocity field.
-    vx_mod : Optional[np.ndarray]
-        Modified X-component of velocity field (after anisotropy).
-    vy_mod : Optional[np.ndarray]
-        Modified Y-component of velocity field (after anisotropy).
-    outside_mask : Optional[np.ndarray]
-        Boolean mask where True indicates grid cells outside all geometries.
-        Used to exclude background cells in percentile calculations.
+        Y-component of the effective velocity field used for displacement
+        (after any anisotropy modulation and smoothing).
+    geometry_mask : Optional[np.ndarray]
+        Geometry index mask where:
+        - -1 = outside all geometries
+        - k = inside geometry k (0 <= k < number of geometries)
     """
 
     iteration: int
     rho: Optional[np.ndarray] = None
     vx: Optional[np.ndarray] = None
     vy: Optional[np.ndarray] = None
-    vx_mod: Optional[np.ndarray] = None
-    vy_mod: Optional[np.ndarray] = None
-    outside_mask: Optional[np.ndarray] = None
+    geometry_mask: Optional[np.ndarray] = None
 
     def __repr__(self) -> str:
         """Concise string representation for terminal display."""
@@ -195,10 +192,6 @@ class CartogramInternalsSnapshot(BaseSnapshot):
             fields.append(f"vx={self.vx.shape}")
         if self.vy is not None:
             fields.append(f"vy={self.vy.shape}")
-        if self.vx_mod is not None:
-            fields.append(f"vx_mod={self.vx_mod.shape}")
-        if self.vy_mod is not None:
-            fields.append(f"vy_mod={self.vy_mod.shape}")
 
         fields_str = ", ".join(fields) if fields else "no_fields"
         return f"CartogramInternalsSnapshot(iter={self.iteration}, {fields_str})"

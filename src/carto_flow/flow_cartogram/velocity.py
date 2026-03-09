@@ -65,11 +65,11 @@ def compute_velocity_anisotropic(
         Grid information containing spatial discretization details.
         Must provide dx and dy attributes for frequency computation.
     Dx : float, default=1.0
-        Diffusion coefficient in x-direction. Controls the "stiffness"
-        of the velocity field in the horizontal direction.
+        Flow amplification factor in x-direction. Higher values produce
+        stronger horizontal flow; lower values suppress it.
     Dy : float, default=1.0
-        Diffusion coefficient in y-direction. Controls the "stiffness"
-        of the velocity field in the vertical direction.
+        Flow amplification factor in y-direction. Higher values produce
+        stronger vertical flow; lower values suppress it.
 
     Returns
     -------
@@ -108,7 +108,7 @@ def compute_velocity_anisotropic(
     >>> print(f"Velocity field shape: {vx.shape}")
     >>>
     >>> # Compute anisotropic velocity field (stronger in x-direction)
-    >>> vx_aniso, vy_aniso = compute_velocity_anisotropic(density, grid, Dx=2.0, Dy=0.5)
+    >>> vx_aniso, vy_aniso = compute_velocity_anisotropic(density, grid, Dx=2.0, Dy=1.0)
     """
     ny, nx = rho.shape
     kx = 2 * np.pi * np.fft.fftfreq(nx, grid.dx)
@@ -116,7 +116,7 @@ def compute_velocity_anisotropic(
     kx, ky = np.meshgrid(kx, ky)
 
     rho_hat = np.fft.fft2((rho - np.mean(rho)) / np.mean(rho))
-    denom = Dx * kx**2 + Dy * ky**2
+    denom = kx**2 / Dx + ky**2 / Dy
     denom[0, 0] = 1.0
 
     phi_hat = -rho_hat / denom
@@ -138,7 +138,7 @@ def _cached_kspace_grad(shape, dx, dy, Dx, Dy):
     kx = 2 * np.pi * np.fft.rfftfreq(nx, d=dx)
     ky = 2 * np.pi * np.fft.fftfreq(ny, d=dy)
     Kx, Ky = np.meshgrid(kx, ky)
-    denom = Dx * Kx**2 + Dy * Ky**2
+    denom = Kx**2 / Dx + Ky**2 / Dy
     denom[0, 0] = 1e-9  # avoid division by zero
     return Kx, Ky, denom
 
@@ -155,7 +155,8 @@ def compute_velocity_anisotropic_rfft(rho, grid, Dx=1.0, Dy=1.0):
         Grid information containing spatial discretization details.
         Must provide dx and dy attributes for frequency computation.
     Dx, Dy : float
-        Diffusion coefficients along x and y axes.
+        Flow amplification factors along x and y axes. Higher values
+        produce stronger flow in the corresponding direction.
 
     Returns
     -------
@@ -216,7 +217,8 @@ class VelocityComputerFFTW:
         grid : Grid
             Grid information containing spatial discretization details
         Dx, Dy : float
-            Diffusion coefficients along x and y axes
+            Flow amplification factors along x and y axes. Higher values
+            produce stronger flow in the corresponding direction.
         threads : int, None
             Number of threads for FFT computation
         """
