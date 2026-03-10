@@ -217,7 +217,9 @@ def load_us_census(
     gdf["State Abbreviation"] = gdf["STATE"].map(censusdis.states.ABBREVIATIONS_FROM_IDS)
 
     if simplify is not None:
-        gdf.geometry = gdf.geometry.simplify(simplify, preserve_topology=True)
+        from carto_flow.geo_utils.simplification import simplify_coverage
+
+        gdf = simplify_coverage(gdf, tolerance=simplify)
 
     if population:
         gdf["Population (Millions)"] = gdf["Population"] / 1e6
