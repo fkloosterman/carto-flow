@@ -104,7 +104,7 @@ def multiresolution_morph(
     gdf: Any,
     column: str,
     landmarks: Any = None,
-    resolution: int = 512,
+    min_resolution: int = 128,
     levels: int = 3,
     margin: float = 0.5,
     square: bool = True,
@@ -127,8 +127,9 @@ def multiresolution_morph(
         Data column name.
     landmarks : GeoDataFrame, optional
         Optional landmarks.
-    resolution : int, default=512
-        Base resolution for highest level grid.
+    min_resolution : int, default=128
+        Resolution of the coarsest (first) grid level. Each subsequent
+        level doubles this, up to ``min_resolution * 2^(levels-1)``.
     levels : int, default=3
         Number of resolution levels.
     margin : float, default=0.5
@@ -161,7 +162,7 @@ def multiresolution_morph(
 
     workflow = CartogramWorkflow(gdf, column, landmarks, displacement_coords, options, density_per=density_per)
     return workflow.morph_multiresolution(
-        resolution=resolution,
+        min_resolution=min_resolution,
         levels=levels,
         margin=margin,
         square=square,

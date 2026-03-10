@@ -34,7 +34,6 @@ Grid shape: (100, 200)
 Number of resolution levels: 3
 """
 
-import math
 from typing import Optional, Union
 
 import numpy as np
@@ -510,9 +509,9 @@ def build_multilevel_grids(bounds, N, n_levels=3, margin=0.5, square=False) -> l
     """
     Build dyadically scaled FFT-friendly grids for multi-resolution cartography.
 
-    Creates a hierarchy of grids with dyadically decreasing resolution levels,
-    starting from the highest resolution and working downward. Each level has
-    dimensions exactly half of the previous level, making them ideal for
+    Creates a hierarchy of grids with dyadically increasing resolution levels,
+    starting from the lowest resolution and doubling at each level. Each level has
+    dimensions exactly double the previous level, making them ideal for
     multi-resolution cartogram algorithms and FFT-based computations.
 
     Parameters
@@ -522,10 +521,9 @@ def build_multilevel_grids(bounds, N, n_levels=3, margin=0.5, square=False) -> l
         the spatial extent for all resolution levels.
     N : int
         Number of grid points along the longest bounding box edge at the
-        highest resolution level. Will be adjusted to be divisible by
-        2^(n_levels-1) for exact halving at each level.
+        lowest resolution level (grids[0]).
     n_levels : int, optional
-        Number of resolution levels to create. Each level halves the
+        Number of resolution levels to create. Each level doubles the
         dimensions of the previous level. Default is 3.
     margin : float, optional
         Margin to add around the bounds as a fraction of the bounding box
@@ -537,11 +535,11 @@ def build_multilevel_grids(bounds, N, n_levels=3, margin=0.5, square=False) -> l
         List of Grid objects ordered from lowest to highest resolution:
 
         - grids[0] : Grid
-            Lowest resolution grid with dimensions divided by 2^(n_levels-1)
+            Lowest resolution grid with approximately N points along the long axis
         - grids[1] : Grid
             Second resolution level with dimensions doubled from previous
         - grids[n_levels-1] : Grid
-            Highest resolution grid with approximately N x N points
+            Highest resolution grid with approximately N * 2^(n_levels-1) points
 
         Each Grid object contains coordinate arrays and metadata for
         its respective resolution level.
@@ -549,30 +547,27 @@ def build_multilevel_grids(bounds, N, n_levels=3, margin=0.5, square=False) -> l
     Examples
     --------
     >>> bounds = (0, 0, 100, 80)  # Rectangular bounding box
-    >>> grids = build_multilevel_grids(bounds, N=256, n_levels=3)
+    >>> grids = build_multilevel_grids(bounds, N=64, n_levels=3)
     >>> print(f"Number of levels: {len(grids)}")
     Number of levels: 3
     >>> print(f"Level 0 (lowest res) shape: {grids[0].shape}")
-    Level 0 (lowest res) shape: (64, 128)
+    Level 0 (lowest res) shape: (64, 51)
     >>> print(f"Level 1 shape: {grids[1].shape}")
-    Level 1 shape: (128, 256)
+    Level 1 shape: (128, 102)
     >>> print(f"Level 2 (highest res) shape: {grids[2].shape}")
-    Level 2 (highest res) shape: (256, 512)
+    Level 2 (highest res) shape: (256, 204)
 
     Notes
     -----
     The algorithm ensures FFT-friendly dimensions by:
 
-    1. Adjusting N to be divisible by 2^(n_levels-1)
-    2. Computing dimensions that maintain aspect ratio
-    3. Finding the best short-axis resolution to minimize aspect distortion
-    4. Creating grids where each level has exactly double the dimensions of the previous
+    1. Computing base dimensions that maintain aspect ratio at the lowest level
+    2. Finding the best short-axis resolution to minimize aspect distortion
+    3. Creating grids where each level has exactly double the dimensions of the previous
 
     The returned grids are ordered from lowest to highest resolution, making
     them suitable for algorithms that progressively refine solutions from
-    coarse to fine scales. The lowest resolution grid (grids[0]) provides
-    a smoothed overview, while the highest resolution grid (grids[-1])
-    captures fine details.
+    coarse to fine scales.
     """
 
     xmin, ymin, xmax, ymax = bounds
@@ -586,38 +581,30 @@ def build_multilevel_grids(bounds, N, n_levels=3, margin=0.5, square=False) -> l
     Lx = xmax - xmin
     Ly = ymax - ymin
 
-    # Ensure N is divisible by 2^(n_levels-1)
-    pow2 = 2 ** (n_levels - 1)
-    N = int(math.ceil(N / pow2) * pow2)
-
-    # Determine long vs short side
+    # Determine long vs short side and compute base (lowest-res) dimensions
     if Lx >= Ly:
         nx_long = N
-        # compute ny that gives dx≈dy
         ny_target = round((Ly / Lx) * nx_long)
     else:
         ny_long = N
         nx_target = round((Lx / Ly) * ny_long)
 
-    # Adjust the short axis resolution to nearest multiple of 2^(n_levels-1)
+    # Find the best short-axis resolution to minimize aspect distortion
     if Lx >= Ly:
-        # start from target, adjust to maintain dx≈dy
         ny_candidates = [ny_target + k for k in range(-4, 5)]
         ny_candidates = [ny for ny in ny_candidates if ny > 4]
         ny_best = min(ny_candidates, key=lambda n: abs((Lx / nx_long) / (Ly / n) - 1))
-        ny_best = int(math.ceil(ny_best / pow2) * pow2)
         nx, ny = nx_long, ny_best
     else:
         nx_candidates = [nx_target + k for k in range(-4, 5)]
         nx_candidates = [nx for nx in nx_candidates if nx > 4]
         nx_best = min(nx_candidates, key=lambda n: abs((Lx / n) / (Ly / ny_long) - 1))
-        nx_best = int(math.ceil(nx_best / pow2) * pow2)
         nx, ny = nx_best, ny_long
 
-    # Now compute the base grid and derive lower levels
+    # Build grids by doubling from the base resolution
     grids = []
     for level in range(n_levels):
-        scale = 2 ** (n_levels - 1 - level)
-        grids.append(Grid((xmin, ymin, xmax, ymax), size=(nx // scale, ny // scale), margin=0.0, square=square))
+        scale = 2**level
+        grids.append(Grid((xmin, ymin, xmax, ymax), size=(nx * scale, ny * scale), margin=0.0, square=square))
 
     return grids

@@ -274,7 +274,7 @@ class CartogramWorkflow:
 
     def morph_multiresolution(
         self,
-        resolution: int = 512,
+        min_resolution: int = 128,
         levels: int = 3,
         margin: float = 0.5,
         square: bool = True,
@@ -287,8 +287,9 @@ class CartogramWorkflow:
 
         Parameters
         ----------
-        resolution : int, default=512
-            Base resolution for the highest level grid.
+        min_resolution : int, default=128
+            Resolution of the coarsest (first) grid level. Each subsequent
+            level doubles this, up to ``min_resolution * 2^(levels-1)``.
         levels : int, default=3
             Number of resolution levels.
         margin : float, default=0.5
@@ -307,13 +308,13 @@ class CartogramWorkflow:
 
         Examples
         --------
-        >>> workflow.morph_multiresolution(resolution=512, levels=3)
+        >>> workflow.morph_multiresolution(min_resolution=128, levels=3)
         >>> for cartogram in workflow:
         ...     print(cartogram.status, cartogram.get_errors().mean_error_pct)
         """
         grids = build_multilevel_grids(
             self._original_gdf.total_bounds,
-            resolution,
+            min_resolution,
             levels,
             margin=margin,
             square=square,
