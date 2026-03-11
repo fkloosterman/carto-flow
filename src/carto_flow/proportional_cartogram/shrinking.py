@@ -12,6 +12,7 @@ import warnings
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Literal
 
+import shapely
 from scipy.optimize import root_scalar
 
 if TYPE_CHECKING:
@@ -45,7 +46,7 @@ def _shrink_single(
     fraction : float
         Target area fraction in [0, 1].
     simplify : float, optional
-        Simplification tolerance (Douglas-Peucker).
+        Simplification tolerance (Visvalingam-Whyatt via coverage_simplify).
     mode : {'area', 'shell'}
         'area' for direct fraction, 'shell' squares the fraction.
     tol : float
@@ -93,7 +94,7 @@ def _shrink_single(
             )
 
     # Apply simplification if requested
-    working_geom = geom.simplify(simplify, preserve_topology=True) if simplify else geom
+    working_geom = shapely.coverage_simplify(geom, simplify) if simplify else geom
 
     # Compute target area
     target_area = fraction * working_geom.area
@@ -182,8 +183,8 @@ def shrink(
           Values should be non-negative and sum to approximately 1.0.
           Example: [0.25, 0.25, 0.25, 0.25] creates 1 core + 3 shells, each 25%.
     simplify : float, optional
-        Simplification tolerance for the Douglas-Peucker algorithm.
-        Applied before shrinking to reduce complexity.
+        Simplification tolerance (Visvalingam-Whyatt via ``shapely.coverage_simplify``).
+        Applied before shrinking to reduce numerical artifacts from highly detailed boundaries.
     mode : {'area', 'shell'}, default='area'
         Interpretation mode for fractions:
 
