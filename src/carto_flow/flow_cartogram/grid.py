@@ -155,6 +155,8 @@ class Grid:
         h = ymax - ymin
 
         # Handle size specification
+        sx: int | None = None
+        sy: int | None = None
         if isinstance(size, int):
             # Scalar size: points along longest edge
             w = xmax - xmin
@@ -175,7 +177,7 @@ class Grid:
             elif sx is None:
                 # Only sy specified: compute sx for similar dx/dy
                 h = ymax - ymin
-                target_dy = h / sy
+                target_dy = h / sy  # type: ignore[operator]
                 w = xmax - xmin
                 sx = max(1, int(w / target_dy))
             elif sy is None:
@@ -186,6 +188,7 @@ class Grid:
                 sy = max(1, int(h / target_dx))
             # else: both sx and sy specified
 
+        assert sx is not None and sy is not None  # noqa: S101
         # Compute cell sizes
         dx = (xmax - xmin) / sx
         dy = (ymax - ymin) / sy
@@ -215,12 +218,12 @@ class Grid:
         self._dy = dy
 
         # Cache storage for lazy properties
-        self._x_coords = None
-        self._y_coords = None
-        self._x_edges = None
-        self._y_edges = None
-        self._X = None
-        self._Y = None
+        self._x_coords: np.ndarray | None = None
+        self._y_coords: np.ndarray | None = None
+        self._x_edges: np.ndarray | None = None
+        self._y_edges: np.ndarray | None = None
+        self._X: np.ndarray | None = None
+        self._Y: np.ndarray | None = None
 
     @property
     def xmin(self) -> float:
@@ -292,6 +295,7 @@ class Grid:
         """1D array of x-coordinates for grid columns (computed and cached)."""
         if self._x_coords is None:
             self._x_coords = np.linspace(self._xmin + self._dx / 2, self._xmax - self._dx / 2, self._sx)
+        assert self._x_coords is not None  # noqa: S101
         return self._x_coords
 
     @property
@@ -299,6 +303,7 @@ class Grid:
         """1D array of y-coordinates for grid rows (computed and cached)."""
         if self._y_coords is None:
             self._y_coords = np.linspace(self._ymin + self._dy / 2, self._ymax - self._dy / 2, self._sy)
+        assert self._y_coords is not None  # noqa: S101
         return self._y_coords
 
     @property
@@ -306,6 +311,7 @@ class Grid:
         """2D array of x-coordinates in meshgrid format (computed and cached)."""
         if self._X is None:
             self._X = np.meshgrid(self.x_coords, self.y_coords)[0]
+        assert self._X is not None  # noqa: S101
         return self._X
 
     @property
@@ -313,6 +319,7 @@ class Grid:
         """2D array of y-coordinates in meshgrid format (computed and cached)."""
         if self._Y is None:
             self._Y = np.meshgrid(self.x_coords, self.y_coords)[1]
+        assert self._Y is not None  # noqa: S101
         return self._Y
 
     @property
@@ -320,6 +327,7 @@ class Grid:
         """1D array of x-coordinates for cell edges (computed and cached)."""
         if self._x_edges is None:
             self._x_edges = np.linspace(self._xmin, self._xmax, self._sx + 1)
+        assert self._x_edges is not None  # noqa: S101
         return self._x_edges
 
     @property
@@ -327,6 +335,7 @@ class Grid:
         """1D array of y-coordinates for cell edges (computed and cached)."""
         if self._y_edges is None:
             self._y_edges = np.linspace(self._ymin, self._ymax, self._sy + 1)
+        assert self._y_edges is not None  # noqa: S101
         return self._y_edges
 
     @classmethod
@@ -505,7 +514,13 @@ class Grid:
         return f"Grid({sx}x{sy}, dx={dx:.3f}, dy={dy:.3f}, bounds={bounds_str})"
 
 
-def build_multilevel_grids(bounds, N, n_levels=3, margin=0.5, square=False) -> list:
+def build_multilevel_grids(
+    bounds: tuple[float, float, float, float],
+    N: int,
+    n_levels: int = 3,
+    margin: float = 0.5,
+    square: bool = False,
+) -> list:
     """
     Build dyadically scaled FFT-friendly grids for multi-resolution cartography.
 

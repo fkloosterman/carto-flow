@@ -24,7 +24,7 @@ from .options import (
 from .symbols import CircleSymbol
 
 
-def _apply_kwargs_to_options(options: dataclasses.dataclass, kwargs: dict) -> Any:
+def _apply_kwargs_to_options(options: Any, kwargs: dict) -> Any:
     """Apply kwargs to a dataclass options instance. Raises on unknown keys.
 
     Parameters

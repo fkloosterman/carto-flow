@@ -11,6 +11,8 @@ from numpy.typing import NDArray
 from .status import SymbolCartogramStatus
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     import geopandas as gpd
     import matplotlib.pyplot as plt
 
@@ -510,7 +512,7 @@ class SymbolCartogram:
 
         return source_subset
 
-    def save(self, path: str) -> None:
+    def save(self, path: str | Path) -> None:
         """Save the symbol cartogram to a JSON file.
 
         Saves the symbol geometries, layout result, source GeoDataFrame, and
@@ -588,7 +590,7 @@ class SymbolCartogram:
             json.dump(data, f, indent=2)
 
     @classmethod
-    def load(cls, path: str) -> SymbolCartogram:
+    def load(cls, path: str | Path) -> SymbolCartogram:
         """Load a symbol cartogram from a JSON file.
 
         Restores a SymbolCartogram saved by save(), including symbol geometries,

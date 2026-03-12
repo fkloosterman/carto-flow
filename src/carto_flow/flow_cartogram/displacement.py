@@ -46,7 +46,7 @@ __all__ = [
 ]
 
 
-def displace_coords(coords, grid, vx, vy, dt):
+def displace_coords(coords: np.ndarray, grid: Grid, vx: np.ndarray, vy: np.ndarray, dt: float) -> np.ndarray:
     """
     Displace coordinates using bilinear interpolation of velocity field.
 
@@ -97,7 +97,16 @@ def displace_coords(coords, grid, vx, vy, dt):
 
 # Option 1: Numba JIT compilation with uniform grid
 @jit(nopython=True, parallel=True, fastmath=True)
-def displace_coords_numba(coords, x_coords, y_coords, vx, vy, dt, dx, dy):
+def displace_coords_numba(
+    coords: np.ndarray,
+    x_coords: np.ndarray,
+    y_coords: np.ndarray,
+    vx: np.ndarray,
+    vy: np.ndarray,
+    dt: float,
+    dx: float,
+    dy: float,
+) -> np.ndarray:
     """
     Numba-optimized version with parallel execution for uniform grids
     dx, dy: constant grid spacing
@@ -251,13 +260,13 @@ def apply_displacement_to_polygons_vectorized(
             raise TypeError("Geometry must be Polygon or MultiPolygon")
 
     # Flatten all coordinates
-    coords = []
+    coord_list: list[np.ndarray] = []
     poly_sizes = []
     for p in flat_polys:
         c = np.array(p.exterior.coords)
-        coords.append(c)
+        coord_list.append(c)
         poly_sizes.append(len(c))
-    coords = np.vstack(coords)
+    coords = np.vstack(coord_list)
 
     # Apply displacement using optimized Numba version
     coords = displace_coords_numba(coords, grid.x_coords, grid.y_coords, vx, vy, dt, grid.dx, grid.dy)
@@ -318,9 +327,7 @@ def upsample_displacement(
         Upsampled displacement fields matching the target resolution.
     """
 
-    old_shape = np.array(u_field.shape, dtype=float)
-    new_shape = np.array(new_shape, dtype=float)
-    zoom_factors = new_shape / old_shape
+    zoom_factors = np.array(new_shape, dtype=float) / np.array(u_field.shape, dtype=float)
 
     # Interpolate to higher resolution
     u_up = zoom(u_field, zoom_factors, order=order, mode="reflect", grid_mode=True)

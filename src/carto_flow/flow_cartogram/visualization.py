@@ -205,7 +205,7 @@ def _resolve_bounds(
 
 def _prepare_density_display(
     rho: np.ndarray,
-    target_density: float,
+    target_density: float | None,
     normalize: Optional[str],
     clip_percentile: Optional[float] = None,
     max_scale: Optional[float] = None,
@@ -343,7 +343,7 @@ def _compute_quiver_scale(
 def _render_density_on_ax(
     ax: "Axes",
     rho: np.ndarray,
-    target_density: float,
+    target_density: float | None,
     extent: list,
     opts: "DensityPlotOptions",
     override_vmin: Optional[float] = None,
@@ -401,14 +401,14 @@ def _render_density_on_ax(
     elif opts.vmin is not None:
         effective_vmin = opts.vmin
     else:
-        effective_vmin = local_vmin
+        effective_vmin = local_vmin  # type: ignore[assignment]
 
     if override_vmax is not None:
         effective_vmax = override_vmax
     elif opts.vmax is not None:
         effective_vmax = opts.vmax
     else:
-        effective_vmax = local_vmax
+        effective_vmax = local_vmax  # type: ignore[assignment]
 
     if opts.normalize is not None and norm is not None:
         norm = TwoSlopeNorm(vmin=effective_vmin, vcenter=0.0, vmax=effective_vmax)
@@ -769,19 +769,19 @@ def plot_convergence(
             max_errors = cartogram.convergence.max_log_errors
     else:
         # Fall back to extracting from snapshots (legacy behavior)
-        iterations = []
-        mean_errors = []
-        max_errors = []
+        iterations = []  # type: ignore[assignment]
+        mean_errors = []  # type: ignore[assignment]
+        max_errors = []  # type: ignore[assignment]
 
         for snapshot in cartogram.snapshots.snapshots:
-            iterations.append(snapshot.iteration)
-            if snapshot.errors is not None:
+            iterations.append(snapshot.iteration)  # type: ignore[attr-defined]
+            if snapshot.errors is not None:  # type: ignore[attr-defined]
                 if use_pct:
-                    mean_errors.append(snapshot.errors.mean_error_pct)
-                    max_errors.append(snapshot.errors.max_error_pct)
+                    mean_errors.append(snapshot.errors.mean_error_pct)  # type: ignore[attr-defined]
+                    max_errors.append(snapshot.errors.max_error_pct)  # type: ignore[attr-defined]
                 else:
-                    mean_errors.append(snapshot.errors.mean_log_error)
-                    max_errors.append(snapshot.errors.max_log_error)
+                    mean_errors.append(snapshot.errors.mean_log_error)  # type: ignore[attr-defined]
+                    max_errors.append(snapshot.errors.max_log_error)  # type: ignore[attr-defined]
 
     # Colors for the two error types
     max_color = "C0"  # Blue
@@ -1008,7 +1008,7 @@ def plot_density_field(
     if not hasattr(snapshot, "rho") or snapshot.rho is None:
         raise ValueError("Snapshot does not contain density field (rho)")
 
-    rho = snapshot.rho
+    rho = snapshot.rho  # type: ignore[attr-defined]
     extent = [grid.xmin, grid.xmax, grid.ymin, grid.ymax]
     target_density = cartogram.target_density
     geometry_mask = getattr(snapshot, "geometry_mask", None)
@@ -1153,8 +1153,8 @@ def plot_velocity_field(
     if not hasattr(snapshot, "vy") or snapshot.vy is None:
         raise ValueError("Snapshot does not contain velocity field (vy)")
 
-    vx = snapshot.vx
-    vy = snapshot.vy
+    vx = snapshot.vx  # type: ignore[attr-defined]
+    vy = snapshot.vy  # type: ignore[attr-defined]
 
     # Create coordinate meshgrid
     X, Y = grid.X, grid.Y
@@ -1326,13 +1326,13 @@ def plot_workflow_convergence(
             max_errors = []
             for snap in cartogram.snapshots.snapshots:
                 iterations.append(snap.iteration)
-                if snap.errors is not None:
+                if snap.errors is not None:  # type: ignore[attr-defined]
                     if use_pct:
-                        mean_errors.append(snap.errors.mean_error_pct)
-                        max_errors.append(snap.errors.max_error_pct)
+                        mean_errors.append(snap.errors.mean_error_pct)  # type: ignore[attr-defined]
+                        max_errors.append(snap.errors.max_error_pct)  # type: ignore[attr-defined]
                     else:
-                        mean_errors.append(snap.errors.mean_log_error)
-                        max_errors.append(snap.errors.max_log_error)
+                        mean_errors.append(snap.errors.mean_log_error)  # type: ignore[attr-defined]
+                        max_errors.append(snap.errors.max_log_error)  # type: ignore[attr-defined]
             if iterations:
                 run_info["iterations"] = np.array(iterations) + iter_offset
                 run_info["mean_errors"] = np.array(mean_errors)
@@ -1393,7 +1393,7 @@ def plot_workflow_convergence(
             target_ax = ax2 if metric == "both" else ax
             color = run_color if color_by_run else mean_color_base
             linestyle = "--" if metric == "both" and not color_by_run else "-"
-            lines = target_ax.plot(
+            lines = target_ax.plot(  # type: ignore[union-attr]
                 iterations[: len(mean_errors)],
                 mean_errors,
                 label=f"Mean Error{label_suffix}" if run_idx == 0 or not color_by_run else None,
@@ -1441,7 +1441,7 @@ def plot_workflow_convergence(
             if metric in ("mean", "both") and latest_options.mean_tol is not None:
                 tol_value = latest_options.mean_tol * 100 if use_pct else latest_options.mean_tol
                 target_ax = ax2 if metric == "both" else ax
-                tol_line = target_ax.axhline(
+                tol_line = target_ax.axhline(  # type: ignore[union-attr]
                     y=tol_value,
                     color=mean_color_base,
                     linestyle=":",

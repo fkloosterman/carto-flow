@@ -543,16 +543,16 @@ def preview_modulator(
         if show == "ratio" and norm is not None:
             # Decade candidates: symmetric pairs selected within ±max_log
             _log_cands = np.log10([0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0, 100.0])
-            ticks_pos = _log_cands[(_log_cands > 0) & (_log_cands <= norm.vmax + 1e-9)]
+            ticks_pos = _log_cands[(_log_cands > 0) & (_log_cands <= norm.vmax + 1e-9)]  # type: ignore[operator]
             ticks_log = np.concatenate([-ticks_pos[::-1], [0.0], ticks_pos])
-            cb.set_ticks(ticks_log)
+            cb.set_ticks(ticks_log)  # type: ignore[arg-type]
             cb.set_ticklabels([f"{10**t:.3g}" for t in ticks_log])
             cb.ax.axhline(0.0, color="0.15", linewidth=1.5)  # log10(1) = 0
         elif show in ("input", "output") and norm is not None and target_density > 0:
             _log_cands = np.log10([0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0, 100.0])
-            ticks_pos = _log_cands[(_log_cands > 0) & (_log_cands <= norm.vmax + 1e-9)]
+            ticks_pos = _log_cands[(_log_cands > 0) & (_log_cands <= norm.vmax + 1e-9)]  # type: ignore[operator]
             ticks_log = np.concatenate([-ticks_pos[::-1], [0.0], ticks_pos])
-            cb.set_ticks(ticks_log)
+            cb.set_ticks(ticks_log)  # type: ignore[arg-type]
             cb.set_ticklabels([f"{target_density:.3g}" if t == 0.0 else f"{10**t:.3g}x" for t in ticks_log])
             cb.ax.axhline(0.0, color="0.15", linewidth=1.5)  # log10(1) = 0 = target density
 

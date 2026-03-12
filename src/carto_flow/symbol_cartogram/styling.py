@@ -165,7 +165,7 @@ class Styling:
         if self._is_array_like(symbol):
             if indices is not None or mask is not None:
                 raise ValueError("Cannot use array values with 'indices' or 'mask'")
-            for i, sym in enumerate(symbol):
+            for i, sym in enumerate(symbol):  # type: ignore[arg-type]
                 self._per_geometry.setdefault(i, {})["symbol"] = sym
             return self
 
@@ -182,7 +182,7 @@ class Styling:
             return self
 
         # Case 4: Global (existing behavior)
-        self._global_symbol = symbol
+        self._global_symbol = symbol  # type: ignore[assignment]
         return self
 
     def set_params(
@@ -300,23 +300,23 @@ class Styling:
             # Determine maximum length to handle
             lengths = []
             if scale_is_array:
-                lengths.append(len(scale))
+                lengths.append(len(scale))  # type: ignore[arg-type]
             if rotation_is_array:
-                lengths.append(len(rotation))
+                lengths.append(len(rotation))  # type: ignore[arg-type]
             if reflection_is_array:
-                lengths.append(len(reflection))
+                lengths.append(len(reflection))  # type: ignore[arg-type]
 
             max_len = max(lengths)
 
             for i in range(max_len):
-                s = scale[i] if scale_is_array else scale
-                r = rotation[i] if rotation_is_array else rotation
-                rf = reflection[i] if reflection_is_array else reflection
+                s = scale[i] if scale_is_array else scale  # type: ignore[index]
+                r = rotation[i] if rotation_is_array else rotation  # type: ignore[index]
+                rf = reflection[i] if reflection_is_array else reflection  # type: ignore[index]
 
                 t = Transform(
-                    scale=s,
-                    rotation=np.radians(r) if r != 0.0 else 0.0,
-                    reflection=rf,
+                    scale=s,  # type: ignore[arg-type]
+                    rotation=np.radians(r) if r != 0.0 else 0.0,  # type: ignore[arg-type]
+                    reflection=rf,  # type: ignore[arg-type]
                 )
 
                 existing = self._per_geometry.get(i, {}).get("transform", Transform())
@@ -326,9 +326,9 @@ class Styling:
         # Case 2: Boolean mask
         if mask is not None:
             t = Transform(
-                scale=scale,
-                rotation=np.radians(rotation) if rotation != 0.0 else 0.0,
-                reflection=reflection,
+                scale=scale,  # type: ignore[arg-type]
+                rotation=np.radians(rotation) if rotation != 0.0 else 0.0,  # type: ignore[arg-type]
+                reflection=reflection,  # type: ignore[arg-type]
             )
             for i in self._mask_to_indices(mask):
                 existing = self._per_geometry.get(i, {}).get("transform", Transform())
@@ -338,9 +338,9 @@ class Styling:
         # Case 3: Explicit indices (existing behavior)
         if indices is not None:
             t = Transform(
-                scale=scale,
-                rotation=np.radians(rotation) if rotation != 0.0 else 0.0,
-                reflection=reflection,
+                scale=scale,  # type: ignore[arg-type]
+                rotation=np.radians(rotation) if rotation != 0.0 else 0.0,  # type: ignore[arg-type]
+                reflection=reflection,  # type: ignore[arg-type]
             )
             for i in indices:
                 existing = self._per_geometry.get(i, {}).get("transform", Transform())
@@ -349,9 +349,9 @@ class Styling:
 
         # Case 4: Global (existing behavior)
         t = Transform(
-            scale=scale,
-            rotation=np.radians(rotation) if rotation != 0.0 else 0.0,
-            reflection=reflection,
+            scale=scale,  # type: ignore[arg-type]
+            rotation=np.radians(rotation) if rotation != 0.0 else 0.0,  # type: ignore[arg-type]
+            reflection=reflection,  # type: ignore[arg-type]
         )
         self._global_transform = self._global_transform.compose(t)
         return self
@@ -453,7 +453,7 @@ class Styling:
             symbol_sizes.append(effective_size * effective_t.scale)
 
         # Create GeoDataFrame
-        gdf = gpd.GeoDataFrame(geometry=geometries, crs=layout_result.crs)  # type: ignore[arg-type]
+        gdf = gpd.GeoDataFrame(geometry=geometries, crs=layout_result.crs)
         gdf["original_index"] = range(len(geometries))
         gdf["_symbol_x"] = symbol_x
         gdf["_symbol_y"] = symbol_y

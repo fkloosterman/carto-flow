@@ -265,7 +265,7 @@ class TilingResult:
             )
 
         n = len(self.polygons)
-        cmap = plt.get_cmap(colormap) if color_by in _CMAP_MODES else None
+        cmap = plt.get_cmap(colormap)
 
         coords = [list(zip(*p.exterior.xy)) for p in self.polygons]
         if color_by == "uniform":
@@ -777,7 +777,7 @@ class SquareTiling(Tiling):
         height = maxy - miny
 
         if tile_size is None:
-            tile_size = np.sqrt(width * height / n_tiles)
+            tile_size = np.sqrt(width * height / n_tiles)  # type: ignore[operator]
 
         s = tile_size
 
@@ -888,7 +888,7 @@ class HexagonTiling(Tiling):
 
         if tile_size is None:
             # Hexagon area = (3*sqrt(3)/2) * s^2 ≈ 2.598 * s^2
-            tile_size = np.sqrt(width * height / n_tiles / 2.598)
+            tile_size = np.sqrt(width * height / n_tiles / 2.598)  # type: ignore[operator]
 
         size = tile_size
 
@@ -1072,7 +1072,7 @@ class TriangleTiling(Tiling):
 
         if tile_size is None:
             # Each tile has area = tile_size^2 (since unit tile has area 1)
-            tile_size = np.sqrt(width * height / n_tiles)
+            tile_size = np.sqrt(width * height / n_tiles)  # type: ignore[operator]
 
         # Scale unit tile to desired size
         s = tile_size
@@ -1117,8 +1117,8 @@ class TriangleTiling(Tiling):
         # Use a generous range of integer coefficients
         max_extent = max(width, height)
         vec_norms = [np.linalg.norm(v) for v in [vec1, vec2]]
-        n1 = int(np.ceil(max_extent / max(vec_norms[0], 1e-10))) + 2
-        n2 = int(np.ceil(max_extent / max(vec_norms[1], 1e-10))) + 2
+        n1 = int(np.ceil(max_extent / max(vec_norms[0], 1e-10))) + 2  # type: ignore[operator]
+        n2 = int(np.ceil(max_extent / max(vec_norms[1], 1e-10))) + 2  # type: ignore[operator]
 
         polygons = []
         transforms = []
@@ -1319,7 +1319,7 @@ class QuadrilateralTiling(Tiling):
         height = maxy - miny
 
         if tile_size is None:
-            tile_size = np.sqrt(width * height / n_tiles)
+            tile_size = np.sqrt(width * height / n_tiles)  # type: ignore[operator]
 
         # Scale unit tile to desired size
         s = tile_size
@@ -1374,8 +1374,8 @@ class QuadrilateralTiling(Tiling):
         # Generate lattice with 2 tiles per domain point
         max_extent = max(width, height)
         norms = [np.linalg.norm(t1), np.linalg.norm(t2)]
-        n1 = int(np.ceil(max_extent / max(norms[0], 1e-10))) + 2
-        n2 = int(np.ceil(max_extent / max(norms[1], 1e-10))) + 2
+        n1 = int(np.ceil(max_extent / max(norms[0], 1e-10))) + 2  # type: ignore[operator]
+        n2 = int(np.ceil(max_extent / max(norms[1], 1e-10))) + 2  # type: ignore[operator]
 
         polygons = []
         transforms_list = []
@@ -2090,8 +2090,7 @@ class IsohedralTiling(Tiling):
         parameters = data.get("parameters")
         edge_curves_raw = data.get("edge_curves", {})
         edge_curves: dict[int, list[tuple[float, float]]] = {
-            int(k): [tuple(pt) for pt in v]  # type: ignore[misc]
-            for k, v in edge_curves_raw.items()
+            int(k): [tuple(pt) for pt in v] for k, v in edge_curves_raw.items()
         }
         return cls(
             tiling_type=tiling_type,
@@ -2140,7 +2139,7 @@ class IsohedralTiling(Tiling):
         "I": "Straight (fixed)",
     }
 
-    def type_info(self_or_type=None, tiling_type: int | None = None) -> dict:
+    def type_info(self_or_type: IsohedralTiling | None = None, tiling_type: int | None = None) -> dict:
         """Return metadata for an isohedral tiling type.
 
         Can be called on an instance (``t.type_info()``) or on the class
@@ -2263,7 +2262,7 @@ class IsohedralTiling(Tiling):
             "parameters": param_descs,
         }
 
-    def describe(self_or_type=None, tiling_type: int | None = None) -> str:
+    def describe(self_or_type: IsohedralTiling | None = None, tiling_type: int | None = None) -> str:
         """Return a human-readable summary of an isohedral tiling type.
 
         Can be called on an instance (``t.describe()``) or on the class
@@ -2290,7 +2289,7 @@ class IsohedralTiling(Tiling):
                 "describe() requires a tiling type number when called on the class, e.g. IsohedralTiling.describe(83)",
             )
 
-        info = IsohedralTiling.type_info(tiling_type)
+        info = IsohedralTiling.type_info(tiling_type)  # type: ignore[arg-type]
         lines = [f"IH{tiling_type} — Isohedral Tiling Type {tiling_type}"]
 
         # Parameters
@@ -2537,7 +2536,7 @@ class IsohedralTiling(Tiling):
         height = maxy - miny
 
         if tile_size is None:
-            tile_size = math.sqrt(width * height / n_tiles)
+            tile_size = math.sqrt(width * height / n_tiles)  # type: ignore[operator]
 
         # Compute scale factor from the vertex-only (straight-edge) polygon.
         # Custom edge curves don't change the tiling lattice or the area each

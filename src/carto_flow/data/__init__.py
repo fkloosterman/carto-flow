@@ -183,7 +183,7 @@ def _check_optional_dependency(package_name: str, purpose: str) -> None:
         ) from None
 
 
-def _import_optional_module(module_name: str, package_name: str, purpose: str):
+def _import_optional_module(module_name: str, package_name: str, purpose: str) -> object:
     """Import an optional module with proper error handling."""
     _check_optional_dependency(package_name, purpose)
     try:
@@ -348,8 +348,8 @@ def load_us_census(
         gdf = gdf[~gdf["State Name"].isin(["Alaska", "Hawaii", "Puerto Rico"])]
 
     gdf["State Abbreviation"] = gdf["STATE"].map(censusdis.states.ABBREVIATIONS_FROM_IDS)
-    gdf["Region"] = gdf["STATE"].map(lambda x: REGION_NAMES.get(STATE_REGIONS.get(x), None))
-    gdf["Division"] = gdf["STATE"].map(lambda x: DIVISION_NAMES.get(STATE_DIVISIONS.get(x), None))
+    gdf["Region"] = gdf["STATE"].map(lambda x: REGION_NAMES.get(STATE_REGIONS.get(x or "", ""), None))  # type: ignore[arg-type]
+    gdf["Division"] = gdf["STATE"].map(lambda x: DIVISION_NAMES.get(STATE_DIVISIONS.get(x or "", ""), None))  # type: ignore[arg-type]
 
     if simplify is not None:
         from carto_flow.geo_utils.simplification import simplify_coverage

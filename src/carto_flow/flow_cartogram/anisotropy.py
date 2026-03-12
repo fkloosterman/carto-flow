@@ -489,7 +489,7 @@ class DirectionalTensor(VelocityModulator):
         if callable(self.theta):
             return self.theta(grid)
         elif np.isscalar(self.theta):
-            return np.full(grid.shape, float(self.theta))
+            return np.full(grid.shape, float(self.theta))  # type: ignore[arg-type]
         else:
             arr = np.asarray(self.theta, dtype=float)
             if arr.shape == grid.shape:
@@ -542,11 +542,11 @@ class DirectionalTensor(VelocityModulator):
 
         else:
 
-            def theta(g, sign=sign):
+            def theta(g, sign=sign):  # type: ignore[misc]
                 return np.arctan2(sign * (g.Y - g.Y.mean()), sign * (g.X - g.X.mean()))
 
         obj = cls(theta=theta, Dpar=Dpar, Dperp=Dperp)
-        obj._description = f"DirectionalTensor.radial(center={center!r}, inward={inward})"
+        obj._description = f"DirectionalTensor.radial(center={center!r}, inward={inward})"  # type: ignore[attr-defined]
         return obj
 
     @classmethod
@@ -582,11 +582,11 @@ class DirectionalTensor(VelocityModulator):
 
         else:
 
-            def theta(g, offset=offset):
+            def theta(g, offset=offset):  # type: ignore[misc]
                 return np.arctan2(g.Y - g.Y.mean(), g.X - g.X.mean()) + offset
 
         obj = cls(theta=theta, Dpar=Dpar, Dperp=Dperp)
-        obj._description = f"DirectionalTensor.tangential(center={center!r}, clockwise={clockwise})"
+        obj._description = f"DirectionalTensor.tangential(center={center!r}, clockwise={clockwise})"  # type: ignore[attr-defined]
         return obj
 
     @classmethod
@@ -655,7 +655,7 @@ class DirectionalTensor(VelocityModulator):
             return result
 
         obj = cls(theta=theta, Dpar=Dpar, Dperp=Dperp)
-        obj._description = f"DirectionalTensor.from_seeds(n={len(pts)}, power={power})"
+        obj._description = f"DirectionalTensor.from_seeds(n={len(pts)}, power={power})"  # type: ignore[attr-defined]
         return obj
 
     def __repr__(self) -> str:
@@ -1265,10 +1265,10 @@ def preview_modulator(
                 _hcb_kw = {"label": _hlabel, **(heatmap_colorbar_kwargs or {})}
                 heatmap_cb = plt.colorbar(heatmap_image, ax=ax, **_hcb_kw)
                 if heatmap_type == "angle":
-                    heatmap_cb.set_ticks(np.array([-1.0, -0.5, 0.0, 0.5, 1.0]) * np.pi)
+                    heatmap_cb.set_ticks(np.array([-1.0, -0.5, 0.0, 0.5, 1.0]) * np.pi)  # type: ignore[arg-type]
                     heatmap_cb.set_ticklabels(["W", "S", "E", "N", "W"])
                 if heatmap_type == "angle_diff":
-                    heatmap_cb.set_ticks(np.array([-1.0, -0.5, 0.0, 0.5, 1.0]) * np.pi)
+                    heatmap_cb.set_ticks(np.array([-1.0, -0.5, 0.0, 0.5, 1.0]) * np.pi)  # type: ignore[arg-type]
                     heatmap_cb.set_ticklabels(["-π", "-π/2", "0", "+π/2", "+π"])
         else:
             raise ValueError(f"heatmap must be 'weight', 'input', 'output', or 'diff', got {heatmap!r}")
@@ -1346,8 +1346,8 @@ def preview_modulator(
 
     return ModulatorPreviewResult(
         ax=ax,
-        arrows=q,
-        colorbar=cb,
+        arrows=q,  # type: ignore[arg-type]
+        colorbar=cb,  # type: ignore[arg-type]
         geometry_collections=geom_collections,
         input_arrows=q_in,
         diff_arrows=q_diff,

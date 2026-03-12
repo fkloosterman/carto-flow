@@ -15,6 +15,7 @@ import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
 from .adjacency import compute_adjacency
+from .options import AdjacencyMode
 
 if TYPE_CHECKING:
     import geopandas as gpd
@@ -138,7 +139,7 @@ def prepare_layout_data(
     size_scale: Literal["sqrt", "linear", "log"] = "sqrt",
     size_max_value: float | None = None,
     size_clip: bool = True,
-    adjacency_mode: Literal["binary", "weighted", "area_weighted"] = "binary",
+    adjacency_mode: AdjacencyMode | Literal["binary", "weighted", "area_weighted"] = "binary",
     distance_tolerance: float | None = None,
     size_normalization: Literal["max", "total"] = "max",
 ) -> LayoutData:
@@ -233,7 +234,7 @@ def prepare_layout_data(
     # 4. Compute adjacency
     adjacency = compute_adjacency(
         gdf,
-        mode=adjacency_mode,
+        mode=AdjacencyMode(adjacency_mode),
         distance_tolerance=distance_tolerance,
     )
 

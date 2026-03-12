@@ -129,7 +129,13 @@ def compute_velocity_anisotropic(
 
 
 @lru_cache(maxsize=16)
-def _cached_kspace_grad(shape, dx, dy, Dx, Dy):
+def _cached_kspace_grad(
+    shape: tuple[int, int],
+    dx: float,
+    dy: float,
+    Dx: float,
+    Dy: float,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Cache k-space arrays for the given grid and anisotropic diffusion parameters.
     Compatible with rFFT (real input → half-spectrum output).
@@ -143,7 +149,12 @@ def _cached_kspace_grad(shape, dx, dy, Dx, Dy):
     return Kx, Ky, denom
 
 
-def compute_velocity_anisotropic_rfft(rho, grid, Dx=1.0, Dy=1.0):
+def compute_velocity_anisotropic_rfft(
+    rho: np.ndarray,
+    grid: Grid,
+    Dx: float = 1.0,
+    Dy: float = 1.0,
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Compute anisotropic velocity field using real FFTs and cached k-space arrays.
 
@@ -208,7 +219,7 @@ class VelocityComputerFFTW:
             vx, vy = computer.compute(rho)
     """
 
-    def __init__(self, grid, Dx=1.0, Dy=1.0, threads=None):
+    def __init__(self, grid: Grid, Dx: float = 1.0, Dy: float = 1.0, threads: int | None = None) -> None:
         """
         Initialize with grid parameters.
 
@@ -251,7 +262,7 @@ class VelocityComputerFFTW:
         self.fft_backward_x = pyfftw.FFTW(self.vx_hat, self.vx, axes=(0, 1), direction="FFTW_BACKWARD", threads=threads)
         self.fft_backward_y = pyfftw.FFTW(self.vy_hat, self.vy, axes=(0, 1), direction="FFTW_BACKWARD", threads=threads)
 
-    def compute(self, rho):
+    def compute(self, rho: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """
         Compute velocity field from density.
 

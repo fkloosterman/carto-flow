@@ -29,11 +29,13 @@ Examples
 """
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable, Optional, Union, cast
 
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.animation import FuncAnimation
+
+from .history import CartogramInternalsSnapshot
 
 if TYPE_CHECKING:
     from geopandas import GeoDataFrame
@@ -548,11 +550,11 @@ def save_animation(
         path.mkdir(parents=True, exist_ok=True)
 
         # Get the figure from the animation
-        fig = anim._fig
+        fig = anim._fig  # type: ignore[attr-defined]
 
         # Save each frame
-        for i, _ in enumerate(range(len(anim._save_seq) if hasattr(anim, "_save_seq") else anim.save_count)):
-            anim._draw_frame(i)
+        for i, _ in enumerate(range(len(anim._save_seq) if hasattr(anim, "_save_seq") else anim.save_count)):  # type: ignore[attr-defined]
+            anim._draw_frame(i)  # type: ignore[attr-defined]
             fig.savefig(path / f"frame_{i:04d}.png", dpi=dpi)
 
     else:
@@ -726,12 +728,12 @@ def animate_morph_history(
             geometries.append(snap.geometry)
             variables["iteration"].append(snap.iteration)
             # Extract errors from the MorphErrors object
-            if snap.errors is not None:
-                variables["mean_error"].append(snap.errors.mean_log_error)
-                variables["max_error"].append(snap.errors.max_log_error)
-                variables["mean_error_pct"].append(snap.errors.mean_error_pct)
-                variables["max_error_pct"].append(snap.errors.max_error_pct)
-                snapshot_errors_pct.append(snap.errors.errors_pct)
+            if snap.errors is not None:  # type: ignore[attr-defined]
+                variables["mean_error"].append(snap.errors.mean_log_error)  # type: ignore[attr-defined]
+                variables["max_error"].append(snap.errors.max_log_error)  # type: ignore[attr-defined]
+                variables["mean_error_pct"].append(snap.errors.mean_error_pct)  # type: ignore[attr-defined]
+                variables["max_error_pct"].append(snap.errors.max_error_pct)  # type: ignore[attr-defined]
+                snapshot_errors_pct.append(snap.errors.errors_pct)  # type: ignore[attr-defined]
             else:
                 variables["mean_error"].append(None)
                 variables["max_error"].append(None)
@@ -985,7 +987,7 @@ def animate_morph_history(
                 ax.set_title(f"Iteration {iteration:.1f}{error_str}")
             else:
                 ax.set_title(f"Iteration {int(iteration)}{error_str}")
-        elif title:
+        elif isinstance(title, str):
             _max_err_arr = variables_arrays.get("max_error")
             _mean_pct_arr = variables_arrays.get("mean_error_pct")
             _max_pct_arr = variables_arrays.get("max_error_pct")
@@ -1286,7 +1288,7 @@ def animate_geometry_keyframes(
         progress = frame / max(1, actual_n_frames - 1)
 
         # Map progress to position in keyframe space [0, n_keyframes-1]
-        position = mapper(progress, variables_arrays)
+        position = mapper(progress, variables_arrays)  # type: ignore[misc]
         position = np.clip(position, 0, n_keyframes - 1)
 
         # Extract integer index and fractional part
@@ -1435,7 +1437,7 @@ def animate_geometry_keyframes(
                 ax.set_title(f"Keyframe {keyframe_idx + 1}/{n_keyframes}")
             else:
                 ax.set_title(f"Transition {keyframe_idx + 1} -> {keyframe_idx + 2} ({t:.0%})")
-        elif title:
+        elif isinstance(title, str):
             _t_elapsed = frame * duration / max(1, actual_n_frames - 1)
             ctx = _SafeFormatDict(keyframe=keyframe_idx + 1, n_keyframes=n_keyframes, t=_t_elapsed, duration=duration)
             ax.set_title(title.format_map(ctx))
@@ -1588,15 +1590,17 @@ def animate_fields(
         return hasattr(s, "vx") and s.vx is not None and hasattr(s, "vy") and s.vy is not None
 
     if show_density and show_velocity:
-        valid_snapshots = [s for s in snapshots if has_density(s) and has_velocity(s)]
+        valid_snapshots = cast(
+            list[CartogramInternalsSnapshot], [s for s in snapshots if has_density(s) and has_velocity(s)]
+        )
         if not valid_snapshots:
             raise ValueError("No snapshots with both density and velocity fields found")
     elif show_density:
-        valid_snapshots = [s for s in snapshots if has_density(s)]
+        valid_snapshots = cast(list[CartogramInternalsSnapshot], [s for s in snapshots if has_density(s)])
         if not valid_snapshots:
             raise ValueError("No density field snapshots found in history_internals")
     else:  # show_velocity only
-        valid_snapshots = [s for s in snapshots if has_velocity(s)]
+        valid_snapshots = cast(list[CartogramInternalsSnapshot], [s for s in snapshots if has_velocity(s)])
         if not valid_snapshots:
             raise ValueError("No velocity field snapshots found in history_internals")
 
@@ -1620,9 +1624,9 @@ def animate_fields(
         mean_errors = []
         max_errors = []
         for snap in cartogram.snapshots.snapshots:
-            if snap.errors is not None:
-                mean_errors.append(snap.errors.mean_log_error)
-                max_errors.append(snap.errors.max_log_error)
+            if snap.errors is not None:  # type: ignore[attr-defined]
+                mean_errors.append(snap.errors.mean_log_error)  # type: ignore[attr-defined]
+                max_errors.append(snap.errors.max_log_error)  # type: ignore[attr-defined]
             else:
                 mean_errors.append(None)
                 max_errors.append(None)
@@ -1667,7 +1671,7 @@ def animate_fields(
         if density_opts.normalize is not None:
             per_snap = [
                 _prepare_density_display(
-                    snap.rho,
+                    snap.rho,  # type: ignore[arg-type]
                     target_density,
                     density_opts.normalize,
                     clip_percentile=density_opts.clip_percentile,
@@ -1681,8 +1685,8 @@ def animate_fields(
             density_vmax = max(vmaxes) if vmaxes else 1.0
         else:
             all_rho = [snap.rho for snap in valid_snapshots]
-            density_vmin = min(r.min() for r in all_rho)
-            density_vmax = max(r.max() for r in all_rho)
+            density_vmin = min(r.min() for r in all_rho)  # type: ignore[union-attr]
+            density_vmax = max(r.max() for r in all_rho)  # type: ignore[union-attr]
 
         # opts.vmin/vmax take precedence over computed global limits
         if density_opts.vmin is not None:
@@ -1700,8 +1704,8 @@ def animate_fields(
 
         all_mags = []
         for snap in valid_snapshots:
-            vx_sub = snap.vx[:: velocity_opts.skip, :: velocity_opts.skip]
-            vy_sub = snap.vy[:: velocity_opts.skip, :: velocity_opts.skip]
+            vx_sub = snap.vx[:: velocity_opts.skip, :: velocity_opts.skip]  # type: ignore[index]
+            vy_sub = snap.vy[:: velocity_opts.skip, :: velocity_opts.skip]  # type: ignore[index]
             mag = np.sqrt(vx_sub**2 + vy_sub**2)
             all_mags.extend([mag.min(), mag.max()])
         mag_min, mag_max = min(all_mags), max(all_mags)
@@ -1773,7 +1777,7 @@ def animate_fields(
                 iteration = iters[idx_before] + t * (iters[idx_after] - iters[idx_before])
                 return rho, vx, vy, iteration, t
 
-    def update(frame):
+    def update(frame: int) -> list:
         ax.clear()
         if not show_axes:
             ax.axis("off")
@@ -1840,7 +1844,7 @@ def animate_fields(
                 ax.set_title(f"{_field_label} (iteration {iteration:.1f})")
             else:
                 ax.set_title(f"{_field_label} (iteration {int(iteration)})")
-        elif title:
+        elif isinstance(title, str):
             _n_iters = valid_snapshots[-1].iteration if valid_snapshots else float("nan")
             _t_elapsed = frame * duration / max(1, n_frames - 1)
             ctx = _SafeFormatDict(
@@ -2201,7 +2205,7 @@ def animate_workflow(
     # Track colorbar (only add once)
     cbar_added = [False]
 
-    def init():
+    def init() -> list:
         ax.set_xlim(xmin, xmax)
         ax.set_ylim(ymin, ymax)
         ax.set_aspect("equal")
@@ -2274,7 +2278,7 @@ def animate_workflow(
                 _has_colors = False
             _precomputed.append((_plot_gdf, _keyframe_idx, _t, _has_colors))
 
-    def update(frame):
+    def update(frame: int) -> list:
         ax.clear()
         if not show_axes:
             ax.axis("off")
@@ -2329,7 +2333,7 @@ def animate_workflow(
             else:
                 _auto_title = "Cartogram Workflow"
             ax.set_title(_auto_title)
-        elif title:
+        elif isinstance(title, str):
             _t_elapsed = frame * duration / max(1, n_frames - 1)
             _n_iters = sum(i for i in kf_iterations if not np.isnan(i))
             ctx = _SafeFormatDict(
@@ -2589,7 +2593,7 @@ def animate_workflow_fields(
     # Set up figure
     fig, ax = plt.subplots(1, 1, figsize=figsize)
 
-    def init():
+    def init() -> list:
         ax.set_aspect("equal")
         return []
 
@@ -2618,7 +2622,7 @@ def animate_workflow_fields(
                 idx = idx_before if t < 0.5 else idx_after
                 return (*all_snapshots[idx], t)
 
-    def update(frame):
+    def update(frame: int) -> list:
         ax.clear()
         if not show_axes:
             ax.axis("off")
@@ -2699,7 +2703,7 @@ def animate_workflow_fields(
 
         if title is None:
             ax.set_title(f"{_field_label} (Run {run_idx}/{n_runs - 1}, iter {snap.iteration})")
-        elif title:
+        elif isinstance(title, str):
             _n_iters = all_snapshots[-1][3] if all_snapshots else float("nan")
             _t_elapsed = frame * duration / max(1, n_frames - 1)
             ctx = _SafeFormatDict(

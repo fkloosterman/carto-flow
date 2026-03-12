@@ -389,16 +389,16 @@ def _fix_island_assignments(
             if t in tile_visited:
                 continue
             comp_regions: list[int] = []
-            q: deque[int] = deque([t])
+            tile_queue: deque[int] = deque([t])
             tile_visited.add(t)
-            while q:
-                cur_t = q.popleft()
+            while tile_queue:
+                cur_t = tile_queue.popleft()
                 comp_regions.extend(tile_to_regions.get(cur_t, []))
                 for nb in np.where(tile_adjacency[cur_t])[0]:
                     nb_int = int(nb)
                     if nb_int not in tile_visited and nb_int in assigned_set:
                         tile_visited.add(nb_int)
-                        q.append(nb_int)
+                        tile_queue.append(nb_int)
             assign_components.append(comp_regions)
 
         if len(assign_components) <= 1:
@@ -507,22 +507,22 @@ def _fix_island_assignments(
         # to the main cluster, closest to its centroid
         for region in island_group:
             # Find unoccupied tiles not adjacent to main cluster
-            candidate_tiles = []
+            isolated_tiles: list[int] = []
             for t in range(m):
                 if t in assigned_set:
                     continue
                 # Check tile is not edge-adjacent to any main cluster tile
                 if not any(tile_adjacency[t, mt] for mt in main_cluster):
-                    candidate_tiles.append(t)
+                    isolated_tiles.append(t)
 
-            if not candidate_tiles:
+            if not isolated_tiles:
                 if verbose:
                     print(f"[fix_islands]   Region {region}: no isolated tile available")
                 continue
 
             centroid = centroids[region]
-            dists = np.linalg.norm(grid_centers[candidate_tiles] - centroid, axis=1)
-            best_tile = candidate_tiles[int(np.argmin(dists))]
+            dists = np.linalg.norm(grid_centers[isolated_tiles] - centroid, axis=1)
+            best_tile = isolated_tiles[int(np.argmin(dists))]
 
             old_tile = int(assignments[region])
             assignments[region] = best_tile
@@ -836,6 +836,7 @@ def assign_to_grid_hungarian(
     has_neighbor_costs = adjacency is not None and (neighbor_weight > 0 or topology_weight > 0)
 
     if has_neighbor_costs:
+        assert adjacency is not None  # noqa: S101 — guaranteed by has_neighbor_costs condition
         # Pre-compute BFS hop distances for distance-scaled neighbor cost
         bfs_dists = _bfs_distance_matrix(tile_adjacency) if tile_adjacency is not None and neighbor_weight > 0 else None
 

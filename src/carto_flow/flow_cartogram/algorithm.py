@@ -403,7 +403,7 @@ def morph_geometries(
             vy *= vmax_scale
 
             # 1f. Cache internal state if requested
-            if options.save_internals:
+            if options.save_internals and internals is not None:
                 snapshot = CartogramInternalsSnapshot(
                     iteration=step + 1,
                     rho=rho.copy(),
@@ -424,7 +424,7 @@ def morph_geometries(
         flat_geoms.invalidate_cache()
 
         # 2b. Displace landmarks if provided (using same velocity field)
-        if landmarks is not None:
+        if landmarks is not None and flat_landmarks_geoms is not None:
             flat_landmarks_geoms.coords = displace_coords_numba(
                 flat_landmarks_geoms.coords, grid.x_coords, grid.y_coords, vx, vy, dt_prime, grid.dx, grid.dy
             )
@@ -478,7 +478,7 @@ def morph_geometries(
             snapshot_data = CartogramSnapshot(
                 iteration=step + 1,
                 geometry=reconstruct_geometries(flat_geoms),
-                landmarks=reconstruct_geometries(flat_landmarks_geoms) if landmarks is not None else None,
+                landmarks=reconstruct_geometries(flat_landmarks_geoms) if flat_landmarks_geoms is not None else None,
                 coords=_convert_coords_to_input_format(flat_coords, coords_format, coords_sz)
                 if flat_coords is not None
                 else None,
@@ -506,7 +506,7 @@ def morph_geometries(
         snapshots=snapshots,
         convergence=convergence,
         status=status,
-        niterations=snapshots.latest().iteration,
+        niterations=snapshots.latest().iteration,  # type: ignore[union-attr]
         duration=time.perf_counter() - start_time,
         options=options,
         grid=grid,

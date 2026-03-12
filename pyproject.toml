@@ -23,12 +23,16 @@ dependencies = [
     "matplotlib>=3.9.4",
     "numba>=0.60.0",
     "numpy>=2.0.2",
+    "pandas>=2.0.0",
     "pyfftw>=0.14.0",
     "scipy>=1.13.1",
     "shapely>=2.1.0",
     "tactile>=0.1.0",
     "tqdm>=4.67.1",
 ]
+
+[project.optional-dependencies]
+data = ["censusdis>=1.2.4"]
 
 [project.urls]
 Homepage = "https://fkloosterman.github.io/carto-flow/"
@@ -73,6 +77,30 @@ check_untyped_defs = true
 warn_return_any = true
 warn_unused_ignores = true
 show_error_codes = true
+
+[[tool.mypy.overrides]]
+module = [
+    "numba.*",
+    "pyfftw.*",
+    "censusdis.*",
+    "joblib.*",
+    "scipy.*",
+    "shapely.*",
+    "geopandas.*",
+    "pandas.*",
+    "tqdm.*",
+    "tactile.*",
+]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["carto_flow.*"]
+disallow_any_unimported = false
+warn_return_any = false
+
+[[tool.mypy.overrides]]
+module = ["carto_flow.*"]
+disallow_untyped_defs = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

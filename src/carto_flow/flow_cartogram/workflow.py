@@ -239,7 +239,7 @@ class CartogramWorkflow:
         if options is not None:
             effective_options = copy.deepcopy(options)
         else:
-            effective_options = copy.deepcopy(self._results[-1].options)
+            effective_options = copy.deepcopy(self._results[-1].options)  # type: ignore[assignment]
             for key, value in overrides.items():
                 if hasattr(effective_options, key):
                     setattr(effective_options, key, value)
@@ -256,11 +256,11 @@ class CartogramWorkflow:
         target_density = float(np.sum(values) / np.sum(scaled_areas))
 
         result = morph_geometries(
-            geometries=latest.geometry,
+            geometries=latest.geometry,  # type: ignore[union-attr]
             values=values,
             target_density=target_density,
-            landmarks=latest.landmarks,
-            coords=latest.coords,
+            landmarks=latest.landmarks,  # type: ignore[union-attr]
+            coords=latest.coords,  # type: ignore[union-attr]
             options=effective_options,
         )
 
@@ -331,15 +331,15 @@ class CartogramWorkflow:
             options_list = [copy.deepcopy(opt) for opt in options]
 
         for level, (grid, level_options) in enumerate(zip(grids, options_list)):
-            level_options.grid = grid
-            level_options.progress_message = (
+            level_options.grid = grid  # type: ignore[union-attr]
+            level_options.progress_message = (  # type: ignore[union-attr]
                 f"{'Refining' if self.is_morphed else 'Morphing'} with {grid.sx}x{grid.sy} grid"
             )
 
             if level > 0:
                 # Pre-scaling is a one-time correction on the initial geometry;
                 # suppress it on refinement levels where geometry is already scaled.
-                level_options.prescale_components = False
+                level_options.prescale_components = False  # type: ignore[union-attr]
 
             result = self.morph(options=level_options)
 

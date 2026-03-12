@@ -28,6 +28,8 @@ from typing import TYPE_CHECKING, Any, Optional
 import numpy as np
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     import geopandas as gpd
 
     from .errors import MorphErrors
@@ -126,7 +128,7 @@ class Cartogram:
         if iteration is None:
             snapshot = self.snapshots.latest() if self.snapshots else None
         else:
-            snapshot = self.snapshots.get_snapshot(iteration)
+            snapshot = self.snapshots.get_snapshot(iteration)  # type: ignore[assignment]
         return snapshot.errors if snapshot else None
 
     def get_convergence_errors(self, iteration: Optional[int] = None) -> Optional["ErrorRecord"]:
@@ -169,7 +171,7 @@ class Cartogram:
         if iteration is None:
             snapshot = self.snapshots.latest() if self.snapshots else None
         else:
-            snapshot = self.snapshots.get_snapshot(iteration)
+            snapshot = self.snapshots.get_snapshot(iteration)  # type: ignore[assignment]
         return snapshot.geometry if snapshot else None
 
     def get_density(self, iteration: Optional[int] = None) -> Optional[np.ndarray]:
@@ -188,7 +190,7 @@ class Cartogram:
         if iteration is None:
             snapshot = self.snapshots.latest() if self.snapshots else None
         else:
-            snapshot = self.snapshots.get_snapshot(iteration)
+            snapshot = self.snapshots.get_snapshot(iteration)  # type: ignore[assignment]
         return snapshot.density if snapshot else None
 
     def get_landmarks(self, iteration: Optional[int] = None) -> Any:
@@ -207,7 +209,7 @@ class Cartogram:
         if iteration is None:
             snapshot = self.snapshots.latest() if self.snapshots else None
         else:
-            snapshot = self.snapshots.get_snapshot(iteration)
+            snapshot = self.snapshots.get_snapshot(iteration)  # type: ignore[assignment]
         return snapshot.landmarks if snapshot else None
 
     def get_coords(self, iteration: Optional[int] = None) -> Any:
@@ -226,7 +228,7 @@ class Cartogram:
         if iteration is None:
             snapshot = self.snapshots.latest() if self.snapshots else None
         else:
-            snapshot = self.snapshots.get_snapshot(iteration)
+            snapshot = self.snapshots.get_snapshot(iteration)  # type: ignore[assignment]
         return snapshot.coords if snapshot else None
 
     # ========================================================================
@@ -280,12 +282,12 @@ class Cartogram:
             raise ValueError(f"No snapshot found for iteration {iteration}")
 
         output = self._source_gdf.copy()
-        output.geometry = snapshot.geometry
+        output.geometry = snapshot.geometry  # type: ignore[attr-defined]
 
-        if include_errors and snapshot.errors is not None:
-            output["_morph_error_pct"] = snapshot.errors.errors_pct
-        if include_density and snapshot.density is not None:
-            output["_morph_density"] = snapshot.density
+        if include_errors and snapshot.errors is not None:  # type: ignore[attr-defined]
+            output["_morph_error_pct"] = snapshot.errors.errors_pct  # type: ignore[attr-defined]
+        if include_density and snapshot.density is not None:  # type: ignore[attr-defined]
+            output["_morph_density"] = snapshot.density  # type: ignore[attr-defined]
 
         return output
 
@@ -349,7 +351,7 @@ class Cartogram:
     # Serialization
     # ========================================================================
 
-    def save(self, path: str) -> None:
+    def save(self, path: "str | Path") -> None:
         """Save cartogram to file.
 
         Parameters
@@ -378,7 +380,7 @@ class Cartogram:
             gdf.to_file(path)
 
     @classmethod
-    def load(cls, path: str) -> "Cartogram":
+    def load(cls, path: "str | Path") -> "Cartogram":
         """Load cartogram from file.
 
         Parameters

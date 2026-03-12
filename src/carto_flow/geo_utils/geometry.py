@@ -476,7 +476,7 @@ class GeometryCoordinateInfo:
         self.metadata = metadata
         self._ring_info = ring_info
         self._polygon_indices = polygon_indices
-        self._cached_areas = None
+        self._cached_areas: np.ndarray | None = None
         self._n_geometries = len(metadata)
 
     @property
@@ -734,7 +734,7 @@ class GeometryCoordinateInfo:
         >>> stats = coord_info.get_statistics()
         >>> print(f"Processing {stats['n_polygons']} polygons")
         """
-        geom_types = {}
+        geom_types: dict[str, int] = {}
         n_polygons = 0
 
         for metadata in self.metadata:

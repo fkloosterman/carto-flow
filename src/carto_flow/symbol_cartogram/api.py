@@ -259,7 +259,9 @@ def create_layout(
         adj_matrix = np.asarray(adjacency, dtype=float)
         if adj_matrix.shape != (n, n):
             raise ValueError(f"adjacency must have shape ({n}, {n}), got {adj_matrix.shape}")
-        data = data._replace(adjacency=adj_matrix)
+        import dataclasses
+
+        data = dataclasses.replace(data, adjacency=adj_matrix)
 
     # Compute
     return layout.compute(data, show_progress=show_progress, save_history=save_history)

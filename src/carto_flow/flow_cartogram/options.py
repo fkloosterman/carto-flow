@@ -144,7 +144,7 @@ class MorphOptions:
     Dx: float = 1.0  # Flow amplification in x: higher = stronger horizontal flow
     Dy: float = 1.0  # Flow amplification in y: higher = stronger vertical flow
     anisotropy: Optional["VelocityModulator"] = None
-    density_mod: "DensityModulator" = None
+    density_mod: Optional["DensityModulator"] = None
 
     # Unit scaling options
     area_scale: float = 1.0  # Multiplier for area values (e.g., 1e6 to convert m² to km²)
@@ -315,7 +315,7 @@ class MorphOptions:
 
         return errors
 
-    def _validate_field_value(self, field_name: str, value) -> str:
+    def _validate_field_value(self, field_name: str, value) -> Optional[str]:
         """Single source of truth for field validation logic."""
         # Grid parameters
         if field_name == "grid_size":
@@ -489,7 +489,7 @@ class MorphOptions:
                     max(bounds[2], geom.bounds[2]),
                     max(bounds[3], geom.bounds[3]),
                 )
-        return bounds
+        return bounds  # type: ignore[return-value]
 
     @classmethod
     def preset_fast(cls) -> "MorphOptions":

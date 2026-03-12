@@ -160,7 +160,7 @@ def multiresolution_morph(
     """
     from .workflow import CartogramWorkflow
 
-    workflow = CartogramWorkflow(gdf, column, landmarks, displacement_coords, options, density_per=density_per)
+    workflow = CartogramWorkflow(gdf, column, landmarks, displacement_coords, options, density_per=density_per)  # type: ignore[arg-type]
     return workflow.morph_multiresolution(
         min_resolution=min_resolution,
         levels=levels,

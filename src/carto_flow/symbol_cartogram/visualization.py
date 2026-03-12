@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from .result import SymbolCartogram
+
 if TYPE_CHECKING:
     import geopandas as gpd
     import matplotlib.pyplot as plt
@@ -21,11 +23,12 @@ if TYPE_CHECKING:
     from .layout_result import LayoutResult
     from .plot_results import (
         AdjacencyHeatmapResult,
+        AdjacencyPlotResult,
         ComparisonPlotResult,
         DisplacementPlotResult,
         SymbolsPlotResult,
+        TilingPlotResult,
     )
-    from .result import SymbolCartogram
 
 # Default hatch patterns cycled when auto-assigning hatches to categories.
 _HATCH_DEFAULTS: list[str] = ["/", "\\", ".", "x", "o", "+", "-", "|", "*", "O"]
@@ -187,7 +190,7 @@ def plot_adjacency(
     colorbar: bool = True,
     colorbar_kwds: dict | None = None,
     **kwargs: Any,
-) -> plt.Axes:
+) -> AdjacencyPlotResult:
     """Visualize the adjacency graph overlaid on the cartogram.
 
     Draws edges between adjacent symbol centers. Edge color can be fixed
@@ -324,7 +327,7 @@ def plot_adjacency(
 
         if edge_color is not None:
             lc = LineCollection(
-                segments_arr,
+                segments_arr,  # type: ignore[arg-type]
                 colors=edge_color,
                 alpha=edge_alpha,
                 linewidths=edge_width,
@@ -336,7 +339,7 @@ def plot_adjacency(
             cmap_obj = plt.get_cmap(edge_cmap)
             colors = cmap_obj(norm(weights_arr))
             lc = LineCollection(
-                segments_arr,
+                segments_arr,  # type: ignore[arg-type]
                 colors=colors,
                 alpha=edge_alpha,
                 linewidths=edge_width,
@@ -345,7 +348,8 @@ def plot_adjacency(
                 sm = plt.cm.ScalarMappable(cmap=cmap_obj, norm=norm)
                 sm.set_array([])
                 _cb_kwds = {"ax": ax, "shrink": 0.6, "label": "adjacency weight", **(colorbar_kwds or {})}
-                colorbar_art = ax.get_figure().colorbar(sm, **_cb_kwds)
+                if (_fig := ax.get_figure()) is not None:
+                    colorbar_art = _fig.colorbar(sm, **_cb_kwds)
         ax.add_collection(lc)
         edge_collection = lc
 
@@ -504,8 +508,8 @@ def plot_adjacency_heatmap(
 
     if isinstance(source, np.ndarray):
         adj = source.astype(float)
-    elif hasattr(source, "symbols"):
-        # SymbolCartogram duck: has .symbols (GeoDataFrame) and .layout_result
+    elif isinstance(source, SymbolCartogram):
+        # SymbolCartogram: has .symbols (GeoDataFrame) and .layout_result
         if source.layout_result is None:
             raise ValueError(
                 "No adjacency matrix available: source.layout_result is None. "
@@ -642,7 +646,8 @@ def plot_adjacency_heatmap(
     colorbar_art = None
     if colorbar:
         _cb_kwds = {"shrink": 0.8, "label": "weight", **(colorbar_kwds or {})}
-        colorbar_art = ax.get_figure().colorbar(im, ax=ax, **_cb_kwds)
+        if (_fig := ax.get_figure()) is not None:
+            colorbar_art = _fig.colorbar(im, ax=ax, **_cb_kwds)
 
     # ------------------------------------------------------------------
     # K. Title and return
@@ -670,7 +675,7 @@ def plot_tiling(
     tile_linewidth: float = 0.5,
     tile_alpha: float = 0.5,
     **kwargs: Any,
-) -> plt.Axes:
+) -> TilingPlotResult:
     """Visualize the tiling grid underlying a grid-placement cartogram.
 
     Plots all tile polygons, distinguishing assigned tiles (with a region)
@@ -1016,7 +1021,8 @@ def _resolve_color(
 
     # (n,) numeric → apply colormap
     if arr.ndim == 1 and len(arr) == n and arr.dtype.kind in ("f", "i", "u"):
-        colors = _apply_cmap(arr.astype(float), cmap, norm, vmin, vmax)
+        cmap_str = cmap if isinstance(cmap, str) else "viridis"
+        colors = _apply_cmap(arr.astype(float), cmap_str, norm, vmin, vmax)
         return colors, False, arr, None
 
     # (n,) object array → list of colors
@@ -1135,7 +1141,9 @@ def _add_legend(
         sm = plt.cm.ScalarMappable(cmap=cm, norm=_norm)
         sm.set_array([])
         cbar_kwds = {k: v for k, v in legend_kwds.items() if k not in ("title", "loc")}
-        cbar = ax.get_figure().colorbar(sm, ax=ax, **cbar_kwds)
+        _fig = ax.get_figure()
+        assert _fig is not None  # noqa: S101
+        cbar = _fig.colorbar(sm, ax=ax, **cbar_kwds)
         label = legend_kwds.get("title", col_name or "")
         cbar.set_label(label)
         return cbar
@@ -1167,7 +1175,9 @@ def _add_legend(
         if existing is not None:
             ax.add_artist(existing)
         ax.legend(handles=handles, **legend_patch_kwds)
-        return ax.get_legend()
+        leg = ax.get_legend()
+        assert leg is not None  # noqa: S101
+        return leg
 
 
 def _add_hatch_legend(
@@ -1218,7 +1228,9 @@ def _add_hatch_legend(
     if existing is not None:
         ax.add_artist(existing)
     ax.legend(handles=handles, **legend_kw)
-    return ax.get_legend()
+    leg = ax.get_legend()
+    assert leg is not None  # noqa: S101
+    return leg
 
 
 # ---------------------------------------------------------------------------
@@ -1696,7 +1708,7 @@ def plot_symbols(
         import matplotlib.lines as mlines
 
         n_steps = 5
-        data_vals = np.linspace(float(np.nanmin(lw_col_values)), float(np.nanmax(lw_col_values)), n_steps)
+        data_vals = np.linspace(float(np.nanmin(lw_col_values)), float(np.nanmax(lw_col_values)), n_steps)  # type: ignore[arg-type]
         lo_lw, hi_lw = linewidth_range
         lw_steps = np.linspace(lo_lw, hi_lw, n_steps)
         handles = [
@@ -1733,13 +1745,15 @@ def plot_symbols(
             alphas,
         ])
         _alpha_cmap = mc.LinearSegmentedColormap.from_list("_alpha", cmap_colors)
-        data_min = float(np.nanmin(alpha_col_values))
-        data_max = float(np.nanmax(alpha_col_values))
+        data_min = float(np.nanmin(alpha_col_values))  # type: ignore[arg-type]
+        data_max = float(np.nanmax(alpha_col_values))  # type: ignore[arg-type]
         _anorm = mc.Normalize(vmin=data_min, vmax=data_max)
         _sm = plt.cm.ScalarMappable(cmap=_alpha_cmap, norm=_anorm)
         _sm.set_array([])
         _akwds = {k: v for k, v in (alpha_legend_kwds or {}).items() if k not in ("title", "loc")}
-        alpha_colorbar = ax.get_figure().colorbar(_sm, ax=ax, **_akwds)
+        _fig = ax.get_figure()
+        assert _fig is not None  # noqa: S101
+        alpha_colorbar = _fig.colorbar(_sm, ax=ax, **_akwds)
         alpha_colorbar.set_label((alpha_legend_kwds or {}).get("title", alpha_col_name or ""))
 
     # --- Per-symbol labels ---
@@ -1798,7 +1812,7 @@ def plot_symbols(
         _lkw = {"ha": "center", "va": "center", **(label_kwargs or {})}
 
         for i, (x, y, text) in enumerate(zip(xs, ys, label_texts)):
-            fs_i = float(fs_arr[i]) if fs_arr is not None else float(fs_val)  # type: ignore[arg-type]
+            fs_i = float(fs_arr[i]) if fs_arr is not None else float(fs_val)
             t = ax.text(
                 x,
                 y,

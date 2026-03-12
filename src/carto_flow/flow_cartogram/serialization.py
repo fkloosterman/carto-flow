@@ -29,7 +29,7 @@ Examples
 import json
 import pickle
 from pathlib import Path
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Any, Union
 
 if TYPE_CHECKING:
     from .cartogram import Cartogram
@@ -355,7 +355,7 @@ def export_history(
     else:
         # Fall back to extracting from snapshots
         for snapshot in history.snapshots:
-            row = {"iteration": snapshot.iteration}
+            row: dict[str, Any] = {"iteration": snapshot.iteration}
 
             # Extract error metrics from MorphErrors object
             if hasattr(snapshot, "errors") and snapshot.errors is not None:

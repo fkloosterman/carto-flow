@@ -53,7 +53,7 @@ Examples
 from abc import ABC
 from collections.abc import Iterator
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 import numpy as np
 
@@ -652,7 +652,7 @@ class History:
         Iterator[CartogramSnapshot]
             Iterator over snapshots in chronological order.
         """
-        return iter(self.snapshots)
+        return cast(Iterator[CartogramSnapshot], iter(self.snapshots))
 
     def latest(self) -> Optional[CartogramSnapshot]:
         """Get the most recent snapshot.
@@ -662,7 +662,7 @@ class History:
         Optional[CartogramSnapshot]
             The most recent snapshot, or None if no snapshots exist.
         """
-        return self.snapshots[-1] if self.snapshots else None
+        return cast(Optional[CartogramSnapshot], self.snapshots[-1] if self.snapshots else None)
 
     def variable_summary(self, variable_name: str) -> dict[str, Any]:
         """Get summary statistics for a variable across all iterations.
