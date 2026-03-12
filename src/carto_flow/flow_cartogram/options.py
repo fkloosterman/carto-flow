@@ -128,15 +128,15 @@ class MorphOptions:
 
     # Grid construction parameters
     grid: Optional["Grid"] = None  # For advanced users
-    grid_size: int | tuple[Optional[int], Optional[int]] | None = 256
+    grid_size: int | tuple[int | None, int | None] | None = 256
     grid_margin: float = 0.5
     grid_square: bool = False
 
     # Computation options
     dt: float = 0.2
     n_iter: int = 500
-    recompute_every: Optional[int] = 10
-    snapshot_every: Optional[int] = None
+    recompute_every: int | None = 10
+    snapshot_every: int | None = None
     mean_tol: float = 0.05  # Percentage tolerance, e.g., 0.05 = 5%
     max_tol: float = 0.10  # Percentage tolerance, e.g., 0.10 = 10%
 
@@ -164,10 +164,10 @@ class MorphOptions:
     # Output options
     save_internals: bool = False
     show_progress: bool = True
-    progress_message: Optional[str] = None
+    progress_message: str | None = None
 
     # Stall detection
-    stall_patience: Optional[int] = 5
+    stall_patience: int | None = 5
     """Maximum number of iterations to allow error to increase before considering algorithm stalled.
 
     If None, stall detection is disabled and the algorithm will run until convergence or
@@ -315,7 +315,7 @@ class MorphOptions:
 
         return errors
 
-    def _validate_field_value(self, field_name: str, value) -> Optional[str]:
+    def _validate_field_value(self, field_name: str, value) -> str | None:
         """Single source of truth for field validation logic."""
         # Grid parameters
         if field_name == "grid_size":
@@ -418,7 +418,7 @@ class MorphOptions:
 
         return errors
 
-    def _validate_grid_size(self, grid_size) -> Optional[str]:
+    def _validate_grid_size(self, grid_size) -> str | None:
         """Validate grid_size parameter format and values."""
         if isinstance(grid_size, int):
             if grid_size <= 0:

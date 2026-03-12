@@ -28,8 +28,9 @@ Examples
 >>> save_animation(anim, "morph.gif", fps=15)
 """
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Optional, Union, cast
+from typing import TYPE_CHECKING, Any, Optional, cast
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -138,8 +139,8 @@ def _linear_over_values(
 
 
 def linear_over(
-    key_or_values: Union[str, np.ndarray],
-    decreasing: Optional[bool] = None,
+    key_or_values: str | np.ndarray,
+    decreasing: bool | None = None,
 ) -> PositionMapper:
     """Create a position mapper that linearizes animation progress over values.
 
@@ -437,8 +438,8 @@ def _interpolate_geodataframe(
     gdf_a: "GeoDataFrame",
     gdf_b: "GeoDataFrame",
     t: float,
-    color_values_a: Optional[np.ndarray] = None,
-    color_values_b: Optional[np.ndarray] = None,
+    color_values_a: np.ndarray | None = None,
+    color_values_b: np.ndarray | None = None,
     color_column: str = "_color",
 ) -> "GeoDataFrame":
     """Interpolate between two GeoDataFrames.
@@ -481,7 +482,7 @@ def _interpolate_geodataframe(
 
     # Interpolate each geometry
     interpolated_geoms = [
-        _interpolate_geometry(geom_a, geom_b, t) for geom_a, geom_b in zip(gdf_a.geometry, gdf_b.geometry)
+        _interpolate_geometry(geom_a, geom_b, t) for geom_a, geom_b in zip(gdf_a.geometry, gdf_b.geometry, strict=False)
     ]
 
     # Create result with interpolated geometries and original attributes
@@ -503,7 +504,7 @@ def _interpolate_geodataframe(
 
 def save_animation(
     anim: FuncAnimation,
-    path: Union[str, Path],
+    path: str | Path,
     fps: int = 15,
     dpi: int = 100,
     **kwargs: Any,
@@ -573,16 +574,16 @@ def animate_morph_history(
     duration: float = 5.0,
     fps: int = 15,
     interpolation: str = "nearest",
-    position_mapper: Optional[PositionMapper] = None,
-    color_by: Optional[Union[str, np.ndarray, list]] = None,
-    vmin: Optional[float] = None,
-    vmax: Optional[float] = None,
+    position_mapper: PositionMapper | None = None,
+    color_by: str | np.ndarray | list | None = None,
+    vmin: float | None = None,
+    vmax: float | None = None,
     cmap: str = "viridis",
     colorbar: bool = False,
-    colorbar_label: Optional[str] = None,
+    colorbar_label: str | None = None,
     show_axes: bool = True,
-    colorbar_kwargs: Optional[dict] = None,
-    title: Optional[Union[str, bool]] = None,
+    colorbar_kwargs: dict | None = None,
+    title: str | bool | None = None,
     precompute: bool = True,
     figsize: tuple[float, float] = (10, 8),
     **kwargs: Any,
@@ -713,8 +714,8 @@ def animate_morph_history(
 
     # Extract geometries and build variables dict from snapshots
     geometries = []
-    snapshot_errors_pct: list[Optional[np.ndarray]] = []
-    snapshot_densities: list[Optional[np.ndarray]] = []
+    snapshot_errors_pct: list[np.ndarray | None] = []
+    snapshot_densities: list[np.ndarray | None] = []
     variables: dict[str, list] = {
         "iteration": [],
         "mean_error": [],
@@ -757,7 +758,7 @@ def animate_morph_history(
 
     # Resolve color_by to a list of per-snapshot arrays and a default label
     resolved_colorbar_label = colorbar_label
-    color_values: Optional[list[np.ndarray]] = None
+    color_values: list[np.ndarray] | None = None
 
     if isinstance(color_by, np.ndarray):
         # Single static array — broadcast to all snapshots
@@ -859,13 +860,13 @@ def animate_morph_history(
         ax.set_aspect("equal")
         return []
 
-    def get_color_values_for_snapshot(idx: int) -> Optional[np.ndarray]:
+    def get_color_values_for_snapshot(idx: int) -> np.ndarray | None:
         """Get color values for a specific snapshot."""
         if color_values is not None:
             return color_values[idx]
         return None
 
-    def get_frame_data(frame: int) -> tuple["GeoDataFrame", int, float, Optional[float], Optional[np.ndarray], float]:
+    def get_frame_data(frame: int) -> tuple["GeoDataFrame", int, float, float | None, np.ndarray | None, float]:
         """Get the geometry and color values for a given frame.
 
         Returns (gdf, snapshot_idx, iteration, error, colors, t) where gdf and colors
@@ -1031,19 +1032,19 @@ def animate_geometry_keyframes(
     duration: float = 5.0,
     fps: int = 15,
     interpolation: str = "linear",
-    position_mapper: Optional[PositionMapper] = None,
-    keyframe_times: Optional[np.ndarray] = None,
+    position_mapper: PositionMapper | None = None,
+    keyframe_times: np.ndarray | None = None,
     hold_frames: int = 0,
-    column: Optional[str] = None,
-    color_values: Optional[list[np.ndarray]] = None,
-    vmin: Optional[float] = None,
-    vmax: Optional[float] = None,
+    column: str | None = None,
+    color_values: list[np.ndarray] | None = None,
+    vmin: float | None = None,
+    vmax: float | None = None,
     cmap: str = "viridis",
     colorbar: bool = False,
-    colorbar_label: Optional[str] = None,
+    colorbar_label: str | None = None,
     show_axes: bool = True,
-    colorbar_kwargs: Optional[dict] = None,
-    title: Optional[Union[str, bool]] = None,
+    colorbar_kwargs: dict | None = None,
+    title: str | bool | None = None,
     precompute: bool = True,
     figsize: tuple[float, float] = (10, 8),
     **kwargs: Any,
@@ -1274,7 +1275,7 @@ def animate_geometry_keyframes(
         ax.set_aspect("equal")
         return []
 
-    def get_color_values_for_keyframe(idx: int) -> Optional[np.ndarray]:
+    def get_color_values_for_keyframe(idx: int) -> np.ndarray | None:
         """Get color values for a specific keyframe."""
         if color_values is not None:
             return color_values[idx]
@@ -1282,7 +1283,7 @@ def animate_geometry_keyframes(
             return gdfs[idx][column].values
         return None
 
-    def get_frame_data_position_mapper(frame: int) -> tuple["GeoDataFrame", int, float, Optional[np.ndarray]]:
+    def get_frame_data_position_mapper(frame: int) -> tuple["GeoDataFrame", int, float, np.ndarray | None]:
         """Get the GeoDataFrame and colors using position mapper approach."""
         # Map frame to progress [0, 1]
         progress = frame / max(1, actual_n_frames - 1)
@@ -1328,7 +1329,7 @@ def animate_geometry_keyframes(
 
                 return gdf, idx_before, t, colors
 
-    def get_frame_data_legacy(frame: int) -> tuple["GeoDataFrame", int, float, Optional[np.ndarray]]:
+    def get_frame_data_legacy(frame: int) -> tuple["GeoDataFrame", int, float, np.ndarray | None]:
         """Get the GeoDataFrame and colors using legacy hold_frames approach."""
         # Check if we're in a hold period
         frames_per_segment = transition_frames + hold_frames
@@ -1469,14 +1470,14 @@ def animate_fields(
     duration: float = 5.0,
     fps: int = 15,
     interpolation: str = "nearest",
-    position_mapper: Optional[PositionMapper] = None,
-    bounds: Optional[Any] = None,
+    position_mapper: PositionMapper | None = None,
+    bounds: Any | None = None,
     show_density: bool = True,
     show_velocity: bool = False,
     density: Optional["DensityPlotOptions"] = None,
     velocity: Optional["VelocityPlotOptions"] = None,
     show_axes: bool = True,
-    title: Optional[Union[str, bool]] = None,
+    title: str | bool | None = None,
     figsize: tuple[float, float] = (10, 8),
 ) -> FuncAnimation:
     """Animate density and/or velocity fields over iterations.
@@ -1633,7 +1634,9 @@ def animate_fields(
 
         if history_iterations and mean_errors:
             valid_pairs = [
-                (it, err) for it, err in zip(history_iterations, mean_errors) if it is not None and err is not None
+                (it, err)
+                for it, err in zip(history_iterations, mean_errors, strict=False)
+                if it is not None and err is not None
             ]
             if valid_pairs:
                 hist_iters = np.array([p[0] for p in valid_pairs])
@@ -1642,7 +1645,9 @@ def animate_fields(
 
         if history_iterations and max_errors:
             valid_pairs = [
-                (it, err) for it, err in zip(history_iterations, max_errors) if it is not None and err is not None
+                (it, err)
+                for it, err in zip(history_iterations, max_errors, strict=False)
+                if it is not None and err is not None
             ]
             if valid_pairs:
                 hist_iters = np.array([p[0] for p in valid_pairs])
@@ -1882,11 +1887,11 @@ def animate_density_field(
     duration: float = 5.0,
     fps: int = 15,
     interpolation: str = "nearest",
-    position_mapper: Optional[PositionMapper] = None,
-    bounds: Optional[Any] = None,
+    position_mapper: PositionMapper | None = None,
+    bounds: Any | None = None,
     density: Optional["DensityPlotOptions"] = None,
     show_axes: bool = True,
-    title: Optional[Union[str, bool]] = None,
+    title: str | bool | None = None,
     figsize: tuple[float, float] = (10, 8),
 ) -> FuncAnimation:
     """Animate density field evolution. Convenience wrapper for animate_fields.
@@ -1915,11 +1920,11 @@ def animate_velocity_field(
     duration: float = 5.0,
     fps: int = 15,
     interpolation: str = "nearest",
-    position_mapper: Optional[PositionMapper] = None,
-    bounds: Optional[Any] = None,
+    position_mapper: PositionMapper | None = None,
+    bounds: Any | None = None,
     velocity: Optional["VelocityPlotOptions"] = None,
     show_axes: bool = True,
-    title: Optional[Union[str, bool]] = None,
+    title: str | bool | None = None,
     figsize: tuple[float, float] = (10, 8),
 ) -> FuncAnimation:
     """Animate velocity field evolution. Convenience wrapper for animate_fields.
@@ -1953,16 +1958,16 @@ def animate_workflow(
     fps: int = 15,
     interpolation: str = "linear",
     hold_at_keyframes: float = 0.5,
-    color_by: Optional[Union[str, np.ndarray, list]] = "errors_pct",
+    color_by: str | np.ndarray | list | None = "errors_pct",
     cmap: str = "RdYlGn_r",
-    vmin: Optional[float] = None,
-    vmax: Optional[float] = None,
+    vmin: float | None = None,
+    vmax: float | None = None,
     colorbar: bool = True,
-    colorbar_label: Optional[str] = None,
+    colorbar_label: str | None = None,
     show_run_info: bool = True,
     show_axes: bool = True,
-    colorbar_kwargs: Optional[dict] = None,
-    title: Optional[Union[str, bool]] = None,
+    colorbar_kwargs: dict | None = None,
+    title: str | bool | None = None,
     precompute: bool = True,
     figsize: tuple[float, float] = (10, 8),
     **kwargs: Any,
@@ -2066,7 +2071,7 @@ def animate_workflow(
 
     # Extract keyframes (final geometry from each cartogram)
     keyframes: list[GeoDataFrame] = []
-    color_values: list[Optional[np.ndarray]] = []
+    color_values: list[np.ndarray | None] = []
     kf_mean_error: list[float] = []
     kf_max_error: list[float] = []
     kf_mean_error_pct: list[float] = []
@@ -2211,7 +2216,7 @@ def animate_workflow(
         ax.set_aspect("equal")
         return []
 
-    def get_frame_data(frame: int) -> tuple["GeoDataFrame", int, float, Optional[np.ndarray]]:
+    def get_frame_data(frame: int) -> tuple["GeoDataFrame", int, float, np.ndarray | None]:
         """Get the GeoDataFrame and colors for a given frame."""
         # Map frame to progress [0, 1]
         progress = frame / max(1, n_frames - 1)
@@ -2371,13 +2376,13 @@ def animate_workflow_fields(
     duration: float = 8.0,
     fps: int = 15,
     interpolation: str = "nearest",
-    bounds: Optional[Any] = None,
+    bounds: Any | None = None,
     show_density: bool = True,
     show_velocity: bool = False,
     density: Optional["DensityPlotOptions"] = None,
     velocity: Optional["VelocityPlotOptions"] = None,
     show_axes: bool = True,
-    title: Optional[Union[str, bool]] = None,
+    title: str | bool | None = None,
     figsize: tuple[float, float] = (10, 8),
 ) -> FuncAnimation:
     """Animate density and/or velocity fields across all cartograms in a workflow.

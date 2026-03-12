@@ -17,7 +17,7 @@ import carto_flow.symbol_cartogram as smb
 
 fig, axes = plt.subplots(3, 5, sharex=True, sharey=True)
 
-for key, ax in zip(smb.IsohedralTiling.list_presets().keys(), axes.ravel()):
+for key, ax in zip(smb.IsohedralTiling.list_presets().keys(), axes.ravel(), strict=False):
     t = smb.IsohedralTiling.from_preset(key)
     t.plot_tile(ax=ax, show_vertices=False)
     ax.axis("square")

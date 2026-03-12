@@ -28,6 +28,7 @@ dependencies = [
     "shapely>=2.1.0",
     "tactile>=0.1.0",
     "tqdm>=4.67.1",
+    "typing_extensions>=4.0.0",
 ]
 
 [project.optional-dependencies]

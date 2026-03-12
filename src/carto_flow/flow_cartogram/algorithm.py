@@ -22,7 +22,6 @@ Examples
 """
 
 import time
-from typing import Optional
 
 import numpy as np
 import tqdm
@@ -199,7 +198,7 @@ def morph_geometries(
     target_density=None,
     landmarks=None,
     coords=None,
-    options: Optional[MorphOptions] = None,
+    options: MorphOptions | None = None,
 ) -> Cartogram:
     """
     Core morphing algorithm working with shapely geometries.

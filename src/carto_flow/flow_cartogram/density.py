@@ -19,7 +19,7 @@ Examples
 >>> density = compute_density_field(gdf, "population", grid)
 """
 
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 import shapely
@@ -41,7 +41,7 @@ __all__ = [
 
 
 def compute_density_field(
-    gdf: Any, column: str, grid: Grid, mean_density: Optional[float] = None, smooth: Optional[float] = None
+    gdf: Any, column: str, grid: Grid, mean_density: float | None = None, smooth: float | None = None
 ) -> np.ndarray:
     """
     Rasterize polygon geometries to a density grid.
@@ -180,7 +180,7 @@ def compute_density_field_from_geometries(
     geom_mask = np.full(grid.X.shape, -1, dtype=int)
 
     # Assign density and geometry indices
-    for idx, (geom, value) in enumerate(zip(geometries, column_values)):
+    for idx, (geom, value) in enumerate(zip(geometries, column_values, strict=False)):
         if geom.is_empty:
             continue
 
@@ -297,7 +297,7 @@ class DensityBorderExtension(DensityModulator):
     >>> DensityBorderExtension(extension_width=10) + DensitySmooth(sigma=2)
     """
 
-    def __init__(self, extension_width: float = 10.0, transition_width: float = 10.0, smooth: Optional[float] = None):
+    def __init__(self, extension_width: float = 10.0, transition_width: float = 10.0, smooth: float | None = None):
         self.extension_width = extension_width
         self.transition_width = transition_width
         self.smooth = smooth

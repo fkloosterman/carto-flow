@@ -329,7 +329,7 @@ def plot_partitions(
     # Build records for plotting
     records = []
     for idx, row in gdf.iterrows():
-        for i, (col_name, geom_col) in enumerate(zip(columns, geom_columns)):
+        for i, (col_name, geom_col) in enumerate(zip(columns, geom_columns, strict=False)):
             geom = row[geom_col]
             if geom is None or geom.is_empty:
                 continue

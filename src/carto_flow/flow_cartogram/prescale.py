@@ -154,7 +154,7 @@ def prescale_connected_components(
         cy = sum(g.centroid.y * g.area for g in component_geoms) / current_area
         origin = (cx, cy)
 
-        for idx, geom in zip(component_indices, component_geoms):
+        for idx, geom in zip(component_indices, component_geoms, strict=False):
             result[idx] = affinity.scale(geom, scale_factor, scale_factor, origin=origin)
 
     return result

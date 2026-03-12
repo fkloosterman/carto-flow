@@ -26,7 +26,7 @@ Examples
 >>> print(f"Status: {cartogram.status}")
 """
 
-from typing import Any, Literal, Optional, Union
+from typing import Any, Literal
 
 from .cartogram import Cartogram
 from .options import MorphOptions
@@ -41,9 +41,9 @@ def morph_gdf(
     gdf: Any,
     column: str,
     landmarks: Any = None,
-    options: Optional[MorphOptions] = None,
+    options: MorphOptions | None = None,
     displacement_coords: Any = None,
-    density_per: Optional[Literal["m2", "km2", "ha", "acre", "sqft", "sqmi"]] = None,
+    density_per: Literal["m2", "km2", "ha", "acre", "sqft", "sqmi"] | None = None,
 ) -> Cartogram:
     """
     Generate cartogram from GeoDataFrame.
@@ -108,9 +108,9 @@ def multiresolution_morph(
     levels: int = 3,
     margin: float = 0.5,
     square: bool = True,
-    options: Union[MorphOptions, list[MorphOptions], None] = None,
+    options: MorphOptions | list[MorphOptions] | None = None,
     displacement_coords: Any = None,
-    density_per: Optional[Literal["m2", "km2", "ha", "acre", "sqft", "sqmi"]] = None,
+    density_per: Literal["m2", "km2", "ha", "acre", "sqft", "sqmi"] | None = None,
 ) -> Cartogram:
     """
     Multi-resolution cartogram generation.

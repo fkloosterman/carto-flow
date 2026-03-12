@@ -53,7 +53,7 @@ Examples
 from abc import ABC
 from collections.abc import Iterator
 from dataclasses import dataclass, field
-from typing import Any, Optional, cast
+from typing import Any, cast
 
 import numpy as np
 
@@ -178,10 +178,10 @@ class CartogramInternalsSnapshot(BaseSnapshot):
     """
 
     iteration: int
-    rho: Optional[np.ndarray] = None
-    vx: Optional[np.ndarray] = None
-    vy: Optional[np.ndarray] = None
-    geometry_mask: Optional[np.ndarray] = None
+    rho: np.ndarray | None = None
+    vx: np.ndarray | None = None
+    vy: np.ndarray | None = None
+    geometry_mask: np.ndarray | None = None
 
     def __repr__(self) -> str:
         """Concise string representation for terminal display."""
@@ -223,11 +223,11 @@ class CartogramSnapshot(BaseSnapshot):
     """
 
     iteration: int
-    geometry: Optional[Any] = None
-    landmarks: Optional[Any] = None
-    coords: Optional[Any] = None
-    errors: Optional[MorphErrors] = None
-    density: Optional[np.ndarray] = None
+    geometry: Any | None = None
+    landmarks: Any | None = None
+    coords: Any | None = None
+    errors: MorphErrors | None = None
+    density: np.ndarray | None = None
 
     def __repr__(self) -> str:
         """Concise string representation for terminal display."""
@@ -345,7 +345,7 @@ class ConvergenceHistory:
         "_size",
     )
 
-    def __init__(self, capacity: Optional[int] = None):
+    def __init__(self, capacity: int | None = None):
         """Initialize with optional pre-allocated capacity."""
         cap = capacity if capacity is not None else 0
         self._iterations = np.empty(cap, dtype=np.int64)
@@ -449,7 +449,7 @@ class ConvergenceHistory:
         for i in range(self._size):
             yield self[i]
 
-    def get_by_iteration(self, iteration: int) -> Optional[ErrorRecord]:
+    def get_by_iteration(self, iteration: int) -> ErrorRecord | None:
         """Get error record for a specific iteration.
 
         Parameters
@@ -530,7 +530,7 @@ class History:
         """
         self.snapshots.append(snapshot)
 
-    def get_snapshot(self, iteration: int) -> Optional[BaseSnapshot]:
+    def get_snapshot(self, iteration: int) -> BaseSnapshot | None:
         """Get snapshot for a specific iteration.
 
         Parameters
@@ -654,7 +654,7 @@ class History:
         """
         return cast(Iterator[CartogramSnapshot], iter(self.snapshots))
 
-    def latest(self) -> Optional[CartogramSnapshot]:
+    def latest(self) -> CartogramSnapshot | None:
         """Get the most recent snapshot.
 
         Returns
@@ -662,7 +662,7 @@ class History:
         Optional[CartogramSnapshot]
             The most recent snapshot, or None if no snapshots exist.
         """
-        return cast(Optional[CartogramSnapshot], self.snapshots[-1] if self.snapshots else None)
+        return cast(CartogramSnapshot | None, self.snapshots[-1] if self.snapshots else None)
 
     def variable_summary(self, variable_name: str) -> dict[str, Any]:
         """Get summary statistics for a variable across all iterations.

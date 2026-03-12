@@ -94,13 +94,13 @@ class DensityPlotOptions:
         Extra keyword arguments forwarded to ``ax.imshow()``.
     """
 
-    normalize: Optional[str] = None
-    cmap: Optional[str] = None
+    normalize: str | None = None
+    cmap: str | None = None
     alpha: float = 1.0
-    clip_percentile: Optional[float] = None
-    max_scale: Optional[float] = None
-    vmin: Optional[float] = None
-    vmax: Optional[float] = None
+    clip_percentile: float | None = None
+    max_scale: float | None = None
+    vmin: float | None = None
+    vmax: float | None = None
     colorbar_kwargs: dict = field(default_factory=dict)
     imshow_kwargs: dict = field(default_factory=dict)
 
@@ -144,12 +144,12 @@ class VelocityPlotOptions:
     """
 
     skip: int = 4
-    velocity_scale: Optional[float] = None
-    ref_magnitude: Optional[float] = None
+    velocity_scale: float | None = None
+    ref_magnitude: float | None = None
     color: str = "white"
     alpha: float = 0.8
-    color_by: Optional[str] = None
-    cmap: Optional[str] = None
+    color_by: str | None = None
+    cmap: str | None = None
     colorbar: bool = True
     alpha_by_magnitude: bool = False
     alpha_range: tuple = (0.2, 1.0)
@@ -160,7 +160,7 @@ class VelocityPlotOptions:
 def _resolve_bounds(
     bounds: Any,
     grid: "Grid",
-) -> Optional[tuple[float, float, float, float]]:
+) -> tuple[float, float, float, float] | None:
     """Resolve bounds parameter to (xmin, ymin, xmax, ymax) tuple.
 
     Parameters
@@ -206,11 +206,11 @@ def _resolve_bounds(
 def _prepare_density_display(
     rho: np.ndarray,
     target_density: float | None,
-    normalize: Optional[str],
-    clip_percentile: Optional[float] = None,
-    max_scale: Optional[float] = None,
-    geometry_mask: Optional[np.ndarray] = None,
-) -> tuple[np.ndarray, Optional[float], Optional[float], str, str, Optional[Any]]:
+    normalize: str | None,
+    clip_percentile: float | None = None,
+    max_scale: float | None = None,
+    geometry_mask: np.ndarray | None = None,
+) -> tuple[np.ndarray, float | None, float | None, str, str, Any | None]:
     """Prepare density field for display with optional normalization.
 
     This internal helper is used by both plot_density_field and animate_fields
@@ -306,8 +306,8 @@ def _compute_quiver_scale(
     mag_max: float,
     skip: int,
     dx: float,
-    scale: Optional[float],
-    ref_magnitude: Optional[float] = None,
+    scale: float | None,
+    ref_magnitude: float | None = None,
 ) -> dict:
     """Return quiver kwargs with scale/scale_units set when scale is given.
 
@@ -346,9 +346,9 @@ def _render_density_on_ax(
     target_density: float | None,
     extent: list,
     opts: "DensityPlotOptions",
-    override_vmin: Optional[float] = None,
-    override_vmax: Optional[float] = None,
-    geometry_mask: Optional[np.ndarray] = None,
+    override_vmin: float | None = None,
+    override_vmax: float | None = None,
+    geometry_mask: np.ndarray | None = None,
 ) -> "tuple[AxesImage, str]":
     """Render a density field on an axes and return the artist and colorbar label.
 
@@ -433,14 +433,14 @@ def _render_density_on_ax(
 def _prepare_velocity_colors(
     vx: np.ndarray,
     vy: np.ndarray,
-    color_by: Optional[str] = None,
+    color_by: str | None = None,
     alpha_by_magnitude: bool = False,
     alpha_range: tuple[float, float] = (0.2, 1.0),
-    cmap: Optional[str] = None,
+    cmap: str | None = None,
     base_color: str = "white",
     base_alpha: float = 0.8,
-    mag_range: Optional[tuple[float, float]] = None,
-) -> tuple[np.ndarray, Optional[str], Optional[str]]:
+    mag_range: tuple[float, float] | None = None,
+) -> tuple[np.ndarray, str | None, str | None]:
     """Prepare velocity field colors based on magnitude/direction.
 
     This internal helper is used by both plot_velocity_field and animate_fields
@@ -532,8 +532,8 @@ def _prepare_velocity_colors(
 def plot_cartogram(
     cartogram: "Cartogram",
     ax: Optional["Axes"] = None,
-    column: Optional[str] = None,
-    iteration: Optional[int] = None,
+    column: str | None = None,
+    iteration: int | None = None,
     cmap: str = "RdYlGn_r",
     legend: bool = True,
     **kwargs: Any,
@@ -608,9 +608,9 @@ def plot_cartogram(
 def plot_comparison(
     left: Any,
     right: "Cartogram",
-    column: Optional[str] = None,
-    iteration: Optional[int] = None,
-    left_iteration: Optional[int] = None,
+    column: str | None = None,
+    iteration: int | None = None,
+    left_iteration: int | None = None,
     figsize: tuple[float, float] = (14, 6),
     **kwargs: Any,
 ) -> "CartogramComparisonResult":
@@ -922,9 +922,9 @@ def plot_convergence(
 def plot_density_field(
     cartogram: "Cartogram",
     *,
-    iteration: Optional[int] = None,
+    iteration: int | None = None,
     ax: Optional["Axes"] = None,
-    bounds: Optional[Any] = None,
+    bounds: Any | None = None,
     density: Optional["DensityPlotOptions"] = None,
 ) -> "DensityFieldResult":
     """Visualize density field as a heatmap.
@@ -1064,9 +1064,9 @@ def plot_density_field(
 def plot_velocity_field(
     cartogram: "Cartogram",
     *,
-    iteration: Optional[int] = None,
+    iteration: int | None = None,
     ax: Optional["Axes"] = None,
-    bounds: Optional[Any] = None,
+    bounds: Any | None = None,
     velocity: Optional["VelocityPlotOptions"] = None,
 ) -> "VelocityFieldResult":
     """Visualize velocity field as a quiver plot.

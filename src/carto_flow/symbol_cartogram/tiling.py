@@ -25,12 +25,13 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Self
+from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
 from numpy.typing import NDArray
 from shapely.affinity import rotate, scale, translate
 from shapely.geometry import Point, Polygon, box
+from typing_extensions import Self
 
 if TYPE_CHECKING:
     from .symbols import Symbol

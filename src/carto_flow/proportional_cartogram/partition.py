@@ -438,7 +438,7 @@ def partition_geometries(
                 from tqdm.auto import tqdm
 
                 iterator = tqdm(
-                    zip(geometries, full_fractions_list),
+                    zip(geometries, full_fractions_list, strict=False),
                     total=n_geometries,
                     desc="Partitioning geometries",
                 )
@@ -448,9 +448,9 @@ def partition_geometries(
                     UserWarning,
                     stacklevel=2,
                 )
-                iterator = zip(geometries, full_fractions_list)
+                iterator = zip(geometries, full_fractions_list, strict=False)
         else:
-            iterator = zip(geometries, full_fractions_list)
+            iterator = zip(geometries, full_fractions_list, strict=False)
 
         results = [process_one(geom, fracs) for geom, fracs in iterator]
     else:
@@ -467,7 +467,7 @@ def partition_geometries(
                 results = Parallel(n_jobs=n_jobs)(
                     delayed(process_one)(geom, fracs)
                     for geom, fracs in tqdm(
-                        zip(geometries, full_fractions_list),
+                        zip(geometries, full_fractions_list, strict=False),
                         total=n_geometries,
                         desc="Partitioning geometries",
                     )
@@ -479,11 +479,12 @@ def partition_geometries(
                     stacklevel=2,
                 )
                 results = Parallel(n_jobs=n_jobs)(
-                    delayed(process_one)(geom, fracs) for geom, fracs in zip(geometries, full_fractions_list)
+                    delayed(process_one)(geom, fracs)
+                    for geom, fracs in zip(geometries, full_fractions_list, strict=False)
                 )
         else:
             results = Parallel(n_jobs=n_jobs)(
-                delayed(process_one)(geom, fracs) for geom, fracs in zip(geometries, full_fractions_list)
+                delayed(process_one)(geom, fracs) for geom, fracs in zip(geometries, full_fractions_list, strict=False)
             )
 
     # Unpack results into output structure

@@ -46,7 +46,7 @@ Examples
 >>> final_polygons = reconstruct_geometries(coord_info)
 """
 
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 from numba import jit, prange
@@ -469,8 +469,8 @@ class GeometryCoordinateInfo:
         self,
         coords: np.ndarray,
         metadata: list[dict],
-        ring_info: Optional[np.ndarray] = None,
-        polygon_indices: Optional[np.ndarray] = None,
+        ring_info: np.ndarray | None = None,
+        polygon_indices: np.ndarray | None = None,
     ):
         self.coords = coords
         self.metadata = metadata

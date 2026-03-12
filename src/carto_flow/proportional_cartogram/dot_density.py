@@ -69,7 +69,7 @@ def _sample_points_in_geometry(
         from shapely.geometry import Point
 
         def _inside(xs, ys):
-            return np.array([geom.contains(Point(x, y)) for x, y in zip(xs, ys)])
+            return np.array([geom.contains(Point(x, y)) for x, y in zip(xs, ys, strict=False)])
 
     collected: list[np.ndarray] = []
     collected_count = 0
@@ -253,7 +253,7 @@ def generate_dot_density(
     geometries_list = list(gdf.geometry)
     indices = list(gdf.index)
 
-    for i, (geom, orig_idx) in enumerate(zip(geometries_list, indices)):
+    for i, (geom, orig_idx) in enumerate(zip(geometries_list, indices, strict=False)):
         row_fracs = fractions[i]
         row_vals = values[i]
 
@@ -274,7 +274,7 @@ def generate_dot_density(
         pts = pts[idx_perm]
 
         start = 0
-        for j, (col_name, count) in enumerate(zip(column_list, counts)):
+        for j, (col_name, count) in enumerate(zip(column_list, counts, strict=False)):
             count = int(count)
             if count == 0:
                 start += count

@@ -47,7 +47,7 @@ __all__ = [
 
 def save_cartogram(
     cartogram: "Cartogram",
-    path: Union[str, Path],
+    path: str | Path,
 ) -> None:
     """Save a Cartogram to JSON format.
 
@@ -144,7 +144,7 @@ def save_cartogram(
         json.dump(data, f, indent=2)
 
 
-def load_cartogram(path: Union[str, Path]) -> "Cartogram":
+def load_cartogram(path: str | Path) -> "Cartogram":
     """Load a Cartogram from JSON format.
 
     Restores a Cartogram saved by save_cartogram() / Cartogram.save(),
@@ -265,7 +265,7 @@ def load_cartogram(path: Union[str, Path]) -> "Cartogram":
 
 def save_workflow(
     workflow: "CartogramWorkflow",
-    path: Union[str, Path],
+    path: str | Path,
 ) -> None:
     """Serialize CartogramWorkflow state to a pickle file.
 
@@ -290,7 +290,7 @@ def save_workflow(
         pickle.dump(workflow, f)
 
 
-def load_workflow(path: Union[str, Path]) -> "CartogramWorkflow":
+def load_workflow(path: str | Path) -> "CartogramWorkflow":
     """Load CartogramWorkflow state from a pickle file.
 
     Parameters
@@ -315,7 +315,7 @@ def load_workflow(path: Union[str, Path]) -> "CartogramWorkflow":
 
 def export_history(
     history: Union["History", "ConvergenceHistory"],
-    path: Union[str, Path],
+    path: str | Path,
     output_format: str = "csv",
 ) -> None:
     """Export convergence history to CSV or JSON format.

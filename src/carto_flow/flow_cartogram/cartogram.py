@@ -89,13 +89,13 @@ class Cartogram:
     duration: float = 0.0
     options: Optional["MorphOptions"] = None
     grid: Optional["Grid"] = None
-    target_density: Optional[float] = None
+    target_density: float | None = None
     internals: Optional["History"] = None
 
     # Source references for GeoDataFrame reconstruction (not shown in repr)
-    _source_gdf: Optional[Any] = field(default=None, repr=False)
-    _source_landmarks_gdf: Optional[Any] = field(default=None, repr=False)
-    _value_column: Optional[str] = field(default=None, repr=False)
+    _source_gdf: Any | None = field(default=None, repr=False)
+    _source_landmarks_gdf: Any | None = field(default=None, repr=False)
+    _value_column: str | None = field(default=None, repr=False)
 
     # ========================================================================
     # Convenience Access
@@ -112,7 +112,7 @@ class Cartogram:
         """
         return self.snapshots.latest() if self.snapshots else None
 
-    def get_errors(self, iteration: Optional[int] = None) -> Optional["MorphErrors"]:
+    def get_errors(self, iteration: int | None = None) -> Optional["MorphErrors"]:
         """Get error metrics for a specific iteration.
 
         Parameters
@@ -131,7 +131,7 @@ class Cartogram:
             snapshot = self.snapshots.get_snapshot(iteration)  # type: ignore[assignment]
         return snapshot.errors if snapshot else None
 
-    def get_convergence_errors(self, iteration: Optional[int] = None) -> Optional["ErrorRecord"]:
+    def get_convergence_errors(self, iteration: int | None = None) -> Optional["ErrorRecord"]:
         """Get scalar error metrics from convergence history.
 
         Unlike get_errors() which returns full MorphErrors from snapshots
@@ -155,7 +155,7 @@ class Cartogram:
             return self.convergence[-1]
         return self.convergence.get_by_iteration(iteration)
 
-    def get_geometry(self, iteration: Optional[int] = None) -> Any:
+    def get_geometry(self, iteration: int | None = None) -> Any:
         """Get geometry sequence for a specific iteration.
 
         Parameters
@@ -174,7 +174,7 @@ class Cartogram:
             snapshot = self.snapshots.get_snapshot(iteration)  # type: ignore[assignment]
         return snapshot.geometry if snapshot else None
 
-    def get_density(self, iteration: Optional[int] = None) -> Optional[np.ndarray]:
+    def get_density(self, iteration: int | None = None) -> np.ndarray | None:
         """Get density values for a specific iteration.
 
         Parameters
@@ -193,7 +193,7 @@ class Cartogram:
             snapshot = self.snapshots.get_snapshot(iteration)  # type: ignore[assignment]
         return snapshot.density if snapshot else None
 
-    def get_landmarks(self, iteration: Optional[int] = None) -> Any:
+    def get_landmarks(self, iteration: int | None = None) -> Any:
         """Get landmark geometries for a specific iteration.
 
         Parameters
@@ -212,7 +212,7 @@ class Cartogram:
             snapshot = self.snapshots.get_snapshot(iteration)  # type: ignore[assignment]
         return snapshot.landmarks if snapshot else None
 
-    def get_coords(self, iteration: Optional[int] = None) -> Any:
+    def get_coords(self, iteration: int | None = None) -> Any:
         """Get displaced coordinates for a specific iteration.
 
         Parameters
@@ -237,7 +237,7 @@ class Cartogram:
 
     def to_geodataframe(
         self,
-        iteration: Optional[int] = None,
+        iteration: int | None = None,
         include_errors: bool = True,
         include_density: bool = True,
     ) -> "gpd.GeoDataFrame":
@@ -297,11 +297,11 @@ class Cartogram:
 
     def plot(
         self,
-        column: Optional[str] = None,
-        iteration: Optional[int] = None,
+        column: str | None = None,
+        iteration: int | None = None,
         cmap: str = "RdYlGn_r",
         legend: bool = True,
-        ax: Optional[Any] = None,
+        ax: Any | None = None,
         **kwargs,
     ) -> "CartogramPlotResult":
         """Plot the cartogram.

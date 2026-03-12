@@ -30,7 +30,7 @@ Examples
 
 import copy
 from collections.abc import Iterator
-from typing import Any, Literal, Optional, Union
+from typing import Any, Literal
 
 import numpy as np
 
@@ -147,8 +147,8 @@ class CartogramWorkflow:
         column: str,
         landmarks: Any = None,
         coords: Any = None,
-        options: Optional[MorphOptions] = None,
-        density_per: Optional[Literal["m2", "km2", "ha", "acre", "sqft", "sqmi"]] = None,
+        options: MorphOptions | None = None,
+        density_per: Literal["m2", "km2", "ha", "acre", "sqft", "sqmi"] | None = None,
     ):
         # Handle density_per by computing area_scale
         if density_per is not None:
@@ -210,7 +210,7 @@ class CartogramWorkflow:
 
     def morph(
         self,
-        options: Optional[MorphOptions] = None,
+        options: MorphOptions | None = None,
         **overrides,
     ) -> Cartogram:
         """
@@ -278,7 +278,7 @@ class CartogramWorkflow:
         levels: int = 3,
         margin: float = 0.5,
         square: bool = True,
-        options: Union[MorphOptions, list[MorphOptions], None] = None,
+        options: MorphOptions | list[MorphOptions] | None = None,
     ) -> Cartogram:
         """
         Multi-resolution morphing with progressive refinement.
@@ -330,7 +330,7 @@ class CartogramWorkflow:
                 raise ValueError(f"Options length ({len(options)}) must match levels ({levels})")
             options_list = [copy.deepcopy(opt) for opt in options]
 
-        for level, (grid, level_options) in enumerate(zip(grids, options_list)):
+        for level, (grid, level_options) in enumerate(zip(grids, options_list, strict=False)):
             level_options.grid = grid  # type: ignore[union-attr]
             level_options.progress_message = (  # type: ignore[union-attr]
                 f"{'Refining' if self.is_morphed else 'Morphing'} with {grid.sx}x{grid.sy} grid"
@@ -390,8 +390,8 @@ class CartogramWorkflow:
 
     def to_geodataframe(
         self,
-        run_id: Optional[int] = None,
-        iteration: Optional[int] = None,
+        run_id: int | None = None,
+        iteration: int | None = None,
         include_errors: bool = True,
         include_density: bool = True,
     ) -> Any:

@@ -34,8 +34,6 @@ Grid shape: (100, 200)
 Number of resolution levels: 3
 """
 
-from typing import Optional, Union
-
 import numpy as np
 
 # Module-level exports - Public API
@@ -115,7 +113,7 @@ class Grid:
     def __init__(
         self,
         bounds: tuple[float, float, float, float],
-        size: Union[int, tuple[Optional[int], Optional[int]]],
+        size: int | tuple[int | None, int | None],
         margin: float = 0.0,
         square: bool = False,
     ):
@@ -342,7 +340,7 @@ class Grid:
     def from_bounds(
         cls,
         bounds: tuple[float, float, float, float],
-        size: Union[int, tuple[Optional[int], Optional[int]]],
+        size: int | tuple[int | None, int | None],
         margin: float = 0.0,
         square: bool = False,
     ) -> "Grid":
@@ -383,7 +381,7 @@ class Grid:
     def from_bounds_and_spacing(
         cls,
         bounds: tuple[float, float, float, float],
-        spacing: Union[float, tuple[float, float]],
+        spacing: float | tuple[float, float],
         margin: float = 0.0,
         strict: bool = False,
     ) -> "Grid":
@@ -446,8 +444,8 @@ class Grid:
     @classmethod
     def from_size_and_spacing(
         cls,
-        size: Union[int, tuple[int, int]],
-        spacing: Union[float, tuple[float, float]],
+        size: int | tuple[int, int],
+        spacing: float | tuple[float, float],
         center: tuple[float, float] = (0.0, 0.0),
     ) -> "Grid":
         """
