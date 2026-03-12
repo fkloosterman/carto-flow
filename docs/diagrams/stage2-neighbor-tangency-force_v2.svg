@@ -1,0 +1,279 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   viewBox="0 0 350 225"
+   version="1.1"
+   id="svg304"
+   sodipodi:docname="stage2-neighbor-tangency-force_v2.svg"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   width="350"
+   height="225"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview306"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     showgrid="false"
+     inkscape:zoom="1.979899"
+     inkscape:cx="200.26274"
+     inkscape:cy="122.98607"
+     inkscape:window-width="1920"
+     inkscape:window-height="991"
+     inkscape:window-x="-9"
+     inkscape:window-y="-9"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg304"
+     showguides="true" />
+  <defs
+     id="defs226">
+    <marker
+       id="arrow"
+       markerWidth="10"
+       markerHeight="10"
+       refX="9"
+       refY="3"
+       orient="auto"
+       markerUnits="strokeWidth">
+      <path
+         d="M 0,0 V 6 L 9,3 Z"
+         fill="#e74c3c"
+         id="path220" />
+    </marker>
+    <marker
+       id="arrow-blue"
+       markerWidth="10"
+       markerHeight="10"
+       refX="9"
+       refY="3"
+       orient="auto"
+       markerUnits="strokeWidth">
+      <path
+         d="M 0,0 V 6 L 9,3 Z"
+         fill="#3498db"
+         id="path223" />
+    </marker>
+    <marker
+       style="overflow:visible"
+       id="Triangle-6"
+       refX="0"
+       refY="0"
+       orient="auto-start-reverse"
+       inkscape:stockid="Triangle arrow"
+       markerWidth="1"
+       markerHeight="1"
+       viewBox="0 0 1 1"
+       inkscape:isstock="true"
+       inkscape:collect="always"
+       preserveAspectRatio="xMidYMid">
+      <path
+         transform="scale(0.5)"
+         style="fill:context-stroke;fill-rule:evenodd;stroke:context-stroke;stroke-width:1pt"
+         d="M 5.77,0 -2.88,5 V -5 Z"
+         id="path135-1" />
+    </marker>
+    <marker
+       style="overflow:visible"
+       id="Triangle-6-2"
+       refX="0"
+       refY="0"
+       orient="auto-start-reverse"
+       inkscape:stockid="Triangle arrow"
+       markerWidth="1"
+       markerHeight="1"
+       viewBox="0 0 1 1"
+       inkscape:isstock="true"
+       inkscape:collect="always"
+       preserveAspectRatio="xMidYMid">
+      <path
+         transform="scale(0.5)"
+         style="fill:context-stroke;fill-rule:evenodd;stroke:context-stroke;stroke-width:1pt"
+         d="M 5.77,0 -2.88,5 V -5 Z"
+         id="path135-1-0" />
+    </marker>
+    <marker
+       style="overflow:visible"
+       id="marker44"
+       refX="0"
+       refY="0"
+       orient="auto-start-reverse"
+       inkscape:stockid="Triangle arrow"
+       markerWidth="1"
+       markerHeight="1"
+       viewBox="0 0 1 1"
+       inkscape:isstock="true"
+       inkscape:collect="always"
+       preserveAspectRatio="xMidYMid">
+      <path
+         transform="scale(0.5)"
+         style="fill:context-stroke;fill-rule:evenodd;stroke:context-stroke;stroke-width:1pt"
+         d="M 5.77,0 -2.88,5 V -5 Z"
+         id="path44" />
+    </marker>
+    <marker
+       style="overflow:visible"
+       id="marker45"
+       refX="0"
+       refY="0"
+       orient="auto-start-reverse"
+       inkscape:stockid="Triangle arrow"
+       markerWidth="1"
+       markerHeight="1"
+       viewBox="0 0 1 1"
+       inkscape:isstock="true"
+       inkscape:collect="always"
+       preserveAspectRatio="xMidYMid">
+      <path
+         transform="scale(0.5)"
+         style="fill:context-stroke;fill-rule:evenodd;stroke:context-stroke;stroke-width:1pt"
+         d="M 5.77,0 -2.88,5 V -5 Z"
+         id="path45" />
+    </marker>
+  </defs>
+  <rect
+     width="350"
+     height="225"
+     fill="#f8f9fa"
+     id="rect228"
+     x="0"
+     y="0"
+     style="stroke-width:0.999998" />
+  <path
+     style="fill:none;fill-opacity:1;stroke:#2980b9;stroke-width:1;stroke-linecap:round;stroke-dasharray:none;stroke-opacity:1"
+     d="m 108.77259,128.69284 c -9.593465,4.13472 -16.682025,9.67155 -18.699345,19.31681"
+     id="path36"
+     sodipodi:nodetypes="cc" />
+  <text
+     x="178.42043"
+     y="30"
+     text-anchor="middle"
+     font-family="Arial, sans-serif"
+     font-size="20px"
+     font-weight="bold"
+     fill="#2c3e50"
+     id="text230"><tspan
+       sodipodi:role="line"
+       id="tspan68"
+       x="178.42043"
+       y="30"
+       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:'Cambria Math';-inkscape-font-specification:'Cambria Math Bold'">Stage 2: Neighbor Attraction Forces</tspan></text>
+  <circle
+     cx="109.42232"
+     cy="-142.82425"
+     r="35.063206"
+     fill="#3498db"
+     fill-opacity="0.6"
+     stroke="#2980b9"
+     stroke-width="1.99999"
+     id="circle246"
+     transform="rotate(90)" />
+  <circle
+     style="fill:#2981ba;fill-opacity:1;stroke:none;stroke-width:0.188975;stroke-linecap:round;stop-color:#000000"
+     id="path1556-39"
+     cx="109.4223"
+     cy="-142.82425"
+     r="2.300637"
+     transform="rotate(90)" />
+  <circle
+     cx="109.4223"
+     cy="-231.07018"
+     r="27.928934"
+     fill="#3498db"
+     fill-opacity="0.6"
+     stroke="#2980b9"
+     stroke-width="2"
+     id="circle246-4"
+     style="fill:#db3434;fill-opacity:0.6;stroke:#b92929;stroke-opacity:1"
+     transform="rotate(90)" />
+  <circle
+     style="fill:#ba2929;fill-opacity:1;stroke:none;stroke-width:0.188975;stroke-linecap:round;stop-color:#000000"
+     id="path1556-39-1"
+     cx="109.4223"
+     cy="-231.07018"
+     r="2.300637"
+     transform="rotate(90)" />
+  <text
+     xml:space="preserve"
+     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:96px;font-family:'Cambria Math';-inkscape-font-specification:'Cambria Math';text-align:end;writing-mode:lr-tb;direction:ltr;text-anchor:end;opacity:0.3;fill:none;fill-opacity:1;stroke:#000000;stroke-width:1;stroke-linecap:round;stroke-dasharray:none;stroke-opacity:1"
+     x="134.10715"
+     y="251.60715"
+     id="text25"><tspan
+       sodipodi:role="line"
+       id="tspan25"
+       x="134.10715"
+       y="251.60715"></tspan></text>
+  <text
+     xml:space="preserve"
+     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:16px;font-family:'Cambria Math';-inkscape-font-specification:'Cambria Math';text-align:end;writing-mode:lr-tb;direction:ltr;text-anchor:end;opacity:1;fill:#000000;fill-opacity:1;stroke:none;stroke-width:1;stroke-linecap:round;stroke-dasharray:none;stroke-opacity:1"
+     x="100.35714"
+     y="350.59564"
+     id="text27"><tspan
+       sodipodi:role="line"
+       id="tspan27"
+       x="100.35714"
+       y="350.59564"></tspan></text>
+  <text
+     xml:space="preserve"
+     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:13.3333px;font-family:'Cambria Math';-inkscape-font-specification:'Cambria Math';text-align:center;writing-mode:lr-tb;direction:ltr;text-anchor:middle;fill:#2980b9;fill-opacity:1;stroke:none;stroke-width:1;stroke-linecap:round;stroke-dasharray:none;stroke-opacity:1"
+     x="89.482101"
+     y="162.98885"
+     id="text28-0"><tspan
+       sodipodi:role="line"
+       x="89.482101"
+       y="162.98885"
+       id="tspan32-6"
+       style="font-size:13.3333px;fill:#2980b9;fill-opacity:1">circle i with</tspan><tspan
+       sodipodi:role="line"
+       x="89.482101"
+       y="179.65547"
+       style="font-size:13.3333px;fill:#2980b9;fill-opacity:1"
+       id="tspan55">position p<tspan
+   style="font-size:65%;baseline-shift:sub;fill:#2980b9;fill-opacity:1"
+   id="tspan54">i</tspan></tspan><tspan
+       sodipodi:role="line"
+       x="89.482101"
+       y="196.3221"
+       style="font-size:13.3333px;fill:#2980b9;fill-opacity:1"
+       id="tspan50">and radius r<tspan
+   style="font-size:65%;baseline-shift:sub;fill:#2980b9;fill-opacity:1"
+   id="tspan53">i</tspan></tspan></text>
+  <path
+     style="fill:#000000;fill-opacity:1;stroke:#2980b9;stroke-width:1;stroke-linecap:round;stroke-dasharray:none;stroke-opacity:1;marker-end:url(#Triangle-6)"
+     d="m 142.82425,109.42231 15.41545,-2e-5"
+     id="path46-4"
+     sodipodi:nodetypes="cc" />
+  <path
+     style="fill:#000000;fill-opacity:1;stroke:#b92929;stroke-width:1;stroke-linecap:round;stroke-dasharray:none;stroke-opacity:1;marker-end:url(#Triangle-6-2)"
+     d="m 230.54011,109.42233 -15.41545,-2e-5"
+     id="path46-4-7"
+     sodipodi:nodetypes="cc" />
+  <text
+     xml:space="preserve"
+     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:13.3333px;font-family:'Cambria Math';-inkscape-font-specification:'Cambria Math';text-align:center;writing-mode:lr-tb;direction:ltr;text-anchor:middle;fill:#000000;fill-opacity:1;stroke:none;stroke-width:1;stroke-linecap:round;stroke-dasharray:none;stroke-opacity:1"
+     x="190.51512"
+     y="58.358406"
+     id="text28-7"><tspan
+       sodipodi:role="line"
+       x="190.51512"
+       y="58.358406"
+       id="tspan32-3"
+       style="font-size:13.3333px;fill:#000000;fill-opacity:1">gap</tspan></text>
+  <path
+     style="fill:#ba2929;fill-opacity:1;stroke:#000000;stroke-width:0.5;stroke-linecap:round;stroke-dasharray:none;stroke-opacity:1"
+     d="M 179.14552,111.59677 V 66.722043"
+     id="path42-7" />
+  <path
+     style="fill:#ba2929;fill-opacity:1;stroke:#000000;stroke-width:0.5;stroke-linecap:round;stroke-dasharray:none;stroke-opacity:1"
+     d="M 201.89124,111.59677 V 66.722043"
+     id="path42-3-4" />
+  <path
+     style="fill:#ba2929;fill-opacity:1;stroke:#000000;stroke-width:0.500001;stroke-linecap:round;stroke-dasharray:none;stroke-opacity:1;marker-start:url(#marker44);marker-end:url(#marker45)"
+     d="m 182.50703,66.472043 h 16.0227"
+     id="path43" />
+</svg>

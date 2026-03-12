@@ -1,0 +1,10 @@
+/* Hide In [ ]: and Out [ ]: prompts */
+.jp-InputPrompt,
+.jp-OutputPrompt,
+.prompt {
+  display: none !important;
+}
+
+.jp-Cell-inputWrapper {
+  margin-left: 0;
+}
