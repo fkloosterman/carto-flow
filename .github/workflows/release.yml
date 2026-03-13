@@ -1,4 +1,4 @@
-name: Bump Version and Create Release
+name: Release
 
 on:
   workflow_dispatch:
@@ -15,17 +15,19 @@ on:
 permissions:
   contents: write
   issues: read
-  pull-requests: read
+  pull_requests: read
+  pages: write
+  id-token: write
 
 jobs:
-  bump-version:
+  release:
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
         uses: actions/checkout@v6
         with:
           token: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
-          fetch-depth: 0  # Fetch all history for changelog generation
+          fetch-depth: 0
 
       - name: Validate version format (semantic versioning)
         run: |
@@ -61,3 +63,25 @@ jobs:
           prerelease: ${{ contains(inputs.version, '-') }}
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Build documentation
+        run: uv run mkdocs build -d site
+
+      - name: Upload documentation artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+        if: ${{ !contains(inputs.version, '-') }} # Only deploy stable versions to production
+
+      # Publish to PyPI is temporarily disabled until PYPI_TOKEN is available
+      # - name: Build package
+      #   run: uv build
+      #
+      # - name: Publish package
+      #   run: uv publish
+      #   env:
+      #     UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
