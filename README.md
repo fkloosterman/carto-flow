@@ -2,11 +2,9 @@
 
 [![Release](https://img.shields.io/github/v/release/bright-fakl/carto-flow)](https://github.com/bright-fakl/carto-flow/releases)
 [![Build Status](https://img.shields.io/github/actions/workflow/status/bright-fakl/carto-flow/main.yml?branch=main&label=build)](https://github.com/bright-fakl/carto-flow/actions/workflows/main.yml)
-[![Release Status](https://img.shields.io/github/actions/workflow/status/bright-fakl/carto-flow/on-release-main.yml?branch=main&label=release)](https://github.com/bright-fakl/carto-flow/actions/workflows/on-release-main.yml)
-[![Bump Version](https://img.shields.io/github/actions/workflow/status/bright-fakl/carto-flow/bump-version.yml?branch=main&label=bump-version)](https://github.com/bright-fakl/carto-flow/actions/workflows/bump-version.yml)
 [![codecov](https://codecov.io/gh/bright-fakl/carto-flow/branch/main/graph/badge.svg)](https://codecov.io/gh/bright-fakl/carto-flow)
 [![Commit Activity](https://img.shields.io/github/commit-activity/m/bright-fakl/carto-flow)](https://github.com/bright-fakl/carto-flow/graphs/commit-activity)
-[![License](https://img.shields.io/github/license/bright-fakl/carto-flow)](https://github.com/bright-fakl/carto-flow/blob/main/LICENSE)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/bright-fakl/carto-flow/blob/main/LICENSE)
 
 A Python library for creating cartograms from geographic data.
 
