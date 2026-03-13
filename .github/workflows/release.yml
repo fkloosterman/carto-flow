@@ -15,7 +15,6 @@ on:
 permissions:
   contents: write
   issues: read
-  pull_requests: read
   pages: write
   id-token: write
 
