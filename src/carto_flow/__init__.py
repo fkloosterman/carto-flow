@@ -126,6 +126,8 @@ from .symbol_cartogram import (
 # Public API Definition
 # ============================================================================
 
+__version__ = "1.1.0"
+
 __all__ = [
     # Symbol cartogram
     "AdjacencyMode",

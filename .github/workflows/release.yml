@@ -42,11 +42,14 @@ jobs:
       - name: Update version using bump_version.py script
         run: uv run python scripts/bump_version.py ${{ inputs.version }}
 
+      - name: Update dependencies and uv.lock
+        run: uv sync
+
       - name: Commit changes
         run: |
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
-          git add pyproject.toml mkdocs.yml
+          git add pyproject.toml mkdocs.yml src/carto_flow/__init__.py uv.lock
           git commit -m "Bump version to ${{ inputs.version }}"
           git push
 

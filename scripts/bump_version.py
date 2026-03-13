@@ -47,6 +47,20 @@ def main():
     mkdocs_path.write_text(updated_content, encoding="utf-8")
     print(f"Updated version in mkdocs.yml to {version}")
 
+    # Update src/carto_flow/__init__.py
+    init_path = Path("src/carto_flow/__init__.py")
+    if not init_path.exists():
+        print("Error: src/carto_flow/__init__.py not found in current directory")
+        sys.exit(1)
+
+    content = init_path.read_text(encoding="utf-8")
+    updated_content = re.sub(r'__version__ = ".*"', f'__version__ = "{version}"', content, flags=re.MULTILINE)
+    init_path.write_text(updated_content, encoding="utf-8")
+    print(f"Updated version in src/carto_flow/__init__.py to {version}")
+
+    # Note: uv.lock should be updated separately using `uv sync` if dependencies change
+    # This ensures consistency between the package version and dependencies
+
     print("✅ Version bump completed successfully")
 
 
