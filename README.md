@@ -1,10 +1,12 @@
 # carto-flow
 
-[![Release](https://img.shields.io/github/v/release/fkloosterman/carto-flow)](https://img.shields.io/github/v/release/fkloosterman/carto-flow)
-[![Build status](https://img.shields.io/github/actions/workflow/status/fkloosterman/carto-flow/main.yml?branch=main)](https://github.com/fkloosterman/carto-flow/actions/workflows/main.yml?query=branch%3Amain)
+[![Release](https://img.shields.io/github/v/release/fkloosterman/carto-flow)](https://github.com/fkloosterman/carto-flow/releases)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/fkloosterman/carto-flow/main.yml?branch=main&label=build)](https://github.com/fkloosterman/carto-flow/actions/workflows/main.yml)
+[![Release Status](https://img.shields.io/github/actions/workflow/status/fkloosterman/carto-flow/on-release-main.yml?branch=main&label=release)](https://github.com/fkloosterman/carto-flow/actions/workflows/on-release-main.yml)
+[![Bump Version](https://img.shields.io/github/actions/workflow/status/fkloosterman/carto-flow/bump-version.yml?branch=main&label=bump-version)](https://github.com/fkloosterman/carto-flow/actions/workflows/bump-version.yml)
 [![codecov](https://codecov.io/gh/fkloosterman/carto-flow/branch/main/graph/badge.svg)](https://codecov.io/gh/fkloosterman/carto-flow)
-[![Commit activity](https://img.shields.io/github/commit-activity/m/fkloosterman/carto-flow)](https://img.shields.io/github/commit-activity/m/fkloosterman/carto-flow)
-[![License](https://img.shields.io/github/license/fkloosterman/carto-flow)](https://img.shields.io/github/license/fkloosterman/carto-flow)
+[![Commit Activity](https://img.shields.io/github/commit-activity/m/fkloosterman/carto-flow)](https://github.com/fkloosterman/carto-flow/graphs/commit-activity)
+[![License](https://img.shields.io/github/license/fkloosterman/carto-flow)](https://github.com/fkloosterman/carto-flow/blob/main/LICENSE)
 
 A Python library for creating cartograms from geographic data.
 

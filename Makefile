@@ -46,6 +46,29 @@ docs-test: ## Test if documentation can be built without warnings or errors
 docs: ## Build and serve the documentation
 	@uv run mkdocs serve
 
+.PHONY: bump-version
+bump-version: ## Bump version using script (e.g., make bump-version VERSION=1.0.0)
+	@if [ -z "${VERSION}" ]; then \
+		echo "❌ Error: VERSION argument is required (e.g., make bump-version VERSION=1.0.0)"; \
+		exit 1; \
+	fi
+	@echo "🚀 Bumping version to ${VERSION}"
+	@uv run python scripts/bump_version.py ${VERSION}
+
+.PHONY: create-tag
+create-tag: ## Create and push git tag (e.g., make create-tag VERSION=1.0.0)
+	@if [ -z "${VERSION}" ]; then \
+		echo "❌ Error: VERSION argument is required (e.g., make create-tag VERSION=1.0.0)"; \
+		exit 1; \
+	fi
+	@echo "🚀 Creating tag ${VERSION}"
+	@git tag ${VERSION}
+	@git push origin ${VERSION}
+	@echo "✅ Tag ${VERSION} created and pushed"
+
+.PHONY: release
+release: bump-version create-tag ## Bump version and create tag (e.g., make release VERSION=1.0.0)
+
 .PHONY: help
 help:
 	@uv run python -c "import re; \

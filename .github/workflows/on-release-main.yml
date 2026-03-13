@@ -19,17 +19,21 @@ jobs:
         id: vars
         run: echo tag=${GITHUB_REF#refs/*/} >> $GITHUB_OUTPUT
 
-      - name: Update project version
-        run: |
-          sed -i "s/^version = \".*\"/version = \"$RELEASE_VERSION\"/" pyproject.toml
+      - name: Set up Python environment
+        uses: ./.github/actions/setup-python-env
+
+      - name: Update project version using bump_version.py script
+        run: uv run python scripts/bump_version.py ${{ steps.vars.outputs.tag }}
         env:
           RELEASE_VERSION: ${{ steps.vars.outputs.tag }}
 
-      - name: Upload updated pyproject.toml
+      - name: Upload updated files
         uses: actions/upload-artifact@v4
         with:
-          name: pyproject-toml
-          path: pyproject.toml
+          name: versioned-files
+          path: |
+            pyproject.toml
+            mkdocs.yml
 
   publish:
     runs-on: ubuntu-latest
@@ -41,10 +45,10 @@ jobs:
       - name: Set up the environment
         uses: ./.github/actions/setup-python-env
 
-      - name: Download updated pyproject.toml
+      - name: Download updated versioned files
         uses: actions/download-artifact@v4
         with:
-          name: pyproject-toml
+          name: versioned-files
 
       - name: Build package
         run: uv build

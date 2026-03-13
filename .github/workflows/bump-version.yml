@@ -1,0 +1,67 @@
+name: Bump Version and Create Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'New version number (must follow semver format, e.g., 1.0.0)'
+        required: true
+        type: string
+      release_notes:
+        description: 'Release notes (leave empty to auto-generate from commits)'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  issues: read
+  pull-requests: read
+
+jobs:
+  bump-version:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
+          fetch-depth: 0  # Fetch all history for changelog generation
+
+      - name: Validate version format (semantic versioning)
+        run: |
+          if ! echo "${{ inputs.version }}" | grep -E -q '^[0-9]+\.[0-9]+\.[0-9]+(\-[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?(\+[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?$'; then
+            echo "::error::Version '${{ inputs.version }}' does not follow semantic versioning format"
+            exit 1
+          fi
+          echo "✅ Version format is valid"
+
+      - name: Set up Python environment
+        uses: ./.github/actions/setup-python-env
+
+      - name: Update version using bump_version.py script
+        run: uv run python scripts/bump_version.py ${{ inputs.version }}
+
+      - name: Commit changes
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add pyproject.toml mkdocs.yml
+          git commit -m "Bump version to ${{ inputs.version }}"
+          git push
+
+      - name: Generate changelog
+        id: changelog
+        uses: scottbrenner/generate-changelog-action@v1
+        if: ${{ inputs.release_notes == '' }}
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.version }}
+          name: Version ${{ inputs.version }}
+          body: ${{ inputs.release_notes || steps.changelog.outputs.changelog }}
+          draft: false
+          prerelease: ${{ contains(inputs.version, '-') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
