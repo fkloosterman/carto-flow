@@ -325,7 +325,24 @@ def morph_geometries(
     flat_geoms = unpack_geometries(geometries)
     # Resolve grid using options
     grid = options.get_grid(options._calculate_bounds_from_geometries(geometries))
-    velocity_computer = VelocityComputerFFTW(grid, Dx=options.Dx, Dy=options.Dy)
+
+    # Resolve parallel settings from options.parallel
+    import multiprocessing as _mp
+
+    if options.parallel is False or options.parallel == 1:
+        _parallel = False
+        _fftw_threads = 1
+        _n_jobs = 1
+    elif options.parallel is True:
+        _parallel = True
+        _fftw_threads = max(_mp.cpu_count() - 1, 1)
+        _n_jobs = -1
+    else:  # positive int > 1
+        _parallel = True
+        _fftw_threads = options.parallel
+        _n_jobs = options.parallel
+
+    velocity_computer = VelocityComputerFFTW(grid, Dx=options.Dx, Dy=options.Dy, threads=_fftw_threads)
 
     # Handle landmarks
     flat_landmarks_geoms = unpack_geometries(landmarks) if landmarks is not None else None
@@ -356,7 +373,9 @@ def morph_geometries(
     stalled_acc = 0
 
     msg = "Morph geometries" if options.progress_message is None else options.progress_message
-    pbar = tqdm.trange(options.n_iter, desc=msg, disable=not options.show_progress, miniters=1, mininterval=0)
+    pbar = tqdm.trange(
+        options.n_iter, desc=msg, disable=not options.show_progress, miniters=20, mininterval=2.0, maxinterval=5.0
+    )
 
     for step in pbar:
         # 1. Compute density field
@@ -369,6 +388,9 @@ def morph_geometries(
                 grid,
                 unscaled_target_density,
                 return_geometry_mask=True,
+                use_bounding_box_filter=options.use_bounding_box_filter,
+                use_parallel=_parallel,
+                n_jobs=_n_jobs,
             )
             rho /= options.area_scale  # convert to display units (values / display-area)
 
@@ -436,7 +458,7 @@ def morph_geometries(
             )
 
         # 3. Convergence stats
-        current_areas = flat_geoms.compute_areas(use_parallel=True)
+        current_areas = flat_geoms.compute_areas(use_parallel=_parallel)
 
         # Compute error metrics using the structured MorphErrors object
         error_metrics = compute_error_metrics(current_areas, target_areas)

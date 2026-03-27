@@ -166,6 +166,24 @@ class MorphOptions:
     show_progress: bool = True
     progress_message: str | None = None
 
+    # Rasterization optimization options
+    use_bounding_box_filter: bool = True
+    """Use bounding box pre-filtering before point-in-polygon checks.
+
+    This can significantly speed up density field computation by first filtering
+    grid cells to only those within each geometry's bounding box before
+    performing the more expensive point-in-polygon checks.
+    """
+
+    # Parallel computation options
+    parallel: bool | int = True
+    """Control parallel computation across all subsystems.
+
+    - True (default): use all available cores (max(cpu_count()-1, 1) for FFT, all cores for density/areas)
+    - False: serial everywhere (1 FFT thread, no parallel density or area computation)
+    - N (int > 1): use exactly N threads/jobs for FFT, density, and area computation
+    """
+
     # Stall detection
     stall_patience: int | None = 5
     """Maximum number of iterations to allow error to increase before considering algorithm stalled.
@@ -306,6 +324,7 @@ class MorphOptions:
             "progress_message",
             "prescale_components",
             "stall_patience",
+            "parallel",
         ]
 
         for field_name in field_names:
@@ -327,6 +346,14 @@ class MorphOptions:
         elif field_name == "grid_square":
             if not isinstance(value, bool):
                 return "grid_square must be a boolean"
+        elif field_name == "use_bounding_box_filter":
+            if not isinstance(value, bool):
+                return "use_bounding_box_filter must be a boolean"
+        elif field_name == "parallel":
+            if not isinstance(value, (bool, int)) or (
+                isinstance(value, int) and not isinstance(value, bool) and value <= 0
+            ):
+                return "parallel must be True, False, or a positive integer"
 
         # Computation parameters
         elif field_name == "dt":
