@@ -93,6 +93,7 @@ nav:
         - Algorithm: explanations/flow-cartogram-algorithm.md
         - History and Snapshot System: explanations/flow-cartogram-history.md
         - Workflow System: explanations/flow-cartogram-workflow.md
+        - Performance: explanations/performance.ipynb
     - Proportional Cartogram:
         - Splitting and Shrinking: explanations/proportional-cartogram.md
     - Symbol Cartogram:
@@ -100,6 +101,9 @@ nav:
         - Grid Layout Algorithm: explanations/symbol-cartogram-grid-layout.md
         - Circle Packing Layout Algorithm: explanations/symbol-cartogram-circle-packing.md
         - Tiling System: explanations/tiling-system.md
+hooks:
+  - docs/hooks/remove_hidden_toc.py
+
 plugins:
   - search
   - gallery:
@@ -108,8 +112,23 @@ plugins:
       matplotlib_animations: true
   - mkdocs-jupyter:
       include: ["*.ipynb"]
+      execute: true
+      allow_errors: false
+      execute_ignore:
+        - "docs/generated/gallery/*.ipynb"
+        - "docs/generated/gallery/flow_cartogram/*.ipynb"
+        - "docs/generated/gallery/proportional_cartogram/*.ipynb"
+        - "docs/generated/gallery/symbol_cartogram/*.ipynb"
+        - "docs/generated/gallery/voronoi_cartogram/*.ipynb"
       ignore_h1_titles: true
       include_source: true
+      remove_tag_config:
+        remove_input_tags:
+          - hide-input
+        remove_output_tags:
+          - hide-output
+        remove_cell_tags:
+          - hide-cell
   - mkdocstrings:
       handlers:
         python:
