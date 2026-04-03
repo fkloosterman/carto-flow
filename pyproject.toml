@@ -40,6 +40,9 @@ Repository = "https://github.com/bright-fakl/carto-flow"
 Documentation = "https://bright-fakl.github.io/carto-flow/"
 
 [dependency-groups]
+benchmark = [
+    "pytest-benchmark>=5.0.0",
+]
 dev = [
     "pytest>=7.2.0",
     "pre-commit>=2.20.0",
@@ -56,6 +59,8 @@ dev = [
     "mkdocs-jupyter>=0.25.1",
     "censusdis>=1.2.4",
     "mkdocs-gallery>=0.10.4",
+    "nbstripout>=0.8.1",
+    "seaborn>=0.13.0",
 ]
 data = [
     "censusdis>=1.2.4",

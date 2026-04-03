@@ -23,6 +23,9 @@ jobs:
       - name: Set up Python environment
         uses: ./.github/actions/setup-python-env
 
+      - name: Install Jupyter kernel
+        run: uv run python -m ipykernel install --user --name carto-flow
+
       - name: Build documentation
         run: uv run mkdocs build -d site
 

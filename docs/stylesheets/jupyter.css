@@ -8,3 +8,8 @@
 .jp-Cell-inputWrapper {
   margin-left: 0;
 }
+
+/* Hide cells tagged with both hide-input and hide-output (executed but not rendered) */
+.celltag_hide-input.celltag_hide-output {
+  display: none;
+}
