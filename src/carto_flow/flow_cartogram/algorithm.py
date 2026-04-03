@@ -24,6 +24,7 @@ Examples
 import time
 
 import numpy as np
+import shapely
 import tqdm
 
 from ..geo_utils.geometry import (
@@ -32,7 +33,7 @@ from ..geo_utils.geometry import (
 )
 from .cartogram import Cartogram
 from .density import DensityModulator, compute_density_field_from_geometries
-from .displacement import displace_coords_numba
+from .displacement import displace_coords_numba, max_abs_velocity, max_velocity_magnitude
 from .errors import compute_error_metrics
 from .history import (
     CartogramInternalsSnapshot,
@@ -326,23 +327,27 @@ def morph_geometries(
     # Resolve grid using options
     grid = options.get_grid(options._calculate_bounds_from_geometries(geometries))
 
-    # Resolve parallel settings from options.parallel
+    # Resolve parallel settings
     import multiprocessing as _mp
 
-    if options.parallel is False or options.parallel == 1:
-        _parallel = False
-        _fftw_threads = 1
-        _n_jobs = 1
-    elif options.parallel is True:
-        _parallel = True
-        _fftw_threads = max(_mp.cpu_count() - 1, 1)
-        _n_jobs = -1
+    if options.parallel_fft is True:
+        _nfft = max(_mp.cpu_count() - 1, 1)
+    elif options.parallel_fft is False or options.parallel_fft == 1:
+        _nfft = 1
     else:  # positive int > 1
-        _parallel = True
-        _fftw_threads = options.parallel
-        _n_jobs = options.parallel
+        _nfft = min(options.parallel_fft, _mp.cpu_count() - 1)
 
-    velocity_computer = VelocityComputerFFTW(grid, Dx=options.Dx, Dy=options.Dy, threads=_fftw_threads)
+    if options.parallel_density is True:
+        _parallel_density = True
+        _ndensity = max(_mp.cpu_count() - 1, 1)
+    elif options.parallel_density is False or options.parallel_density == 1:
+        _parallel_density = False
+        _ndensity = 1
+    else:  # positive int > 1
+        _parallel_density = True
+        _ndensity = min(options.parallel_density, _mp.cpu_count() - 1)
+
+    velocity_computer = VelocityComputerFFTW(grid, Dx=options.Dx, Dy=options.Dy, threads=_nfft)
 
     # Handle landmarks
     flat_landmarks_geoms = unpack_geometries(landmarks) if landmarks is not None else None
@@ -357,9 +362,9 @@ def morph_geometries(
         flat_coords = _normalize_coordinates(coords, coords_format)
 
     # 5. Main algorithm loop with snapshotting
-    snapshots = History()
+    snapshots: History[CartogramSnapshot] = History()
     convergence = ConvergenceHistory(capacity=options.n_iter)
-    internals = History() if options.save_internals else None
+    internals: History[CartogramInternalsSnapshot] | None = History() if options.save_internals else None
 
     # Pre-compute log2 thresholds from user-specified percentage tolerances
     # User specifies tolerance as percentage (e.g., 0.02 for 2%)
@@ -380,17 +385,28 @@ def morph_geometries(
     for step in pbar:
         # 1. Compute density field
         if (options.recompute_every is not None and step % options.recompute_every == 0) or step == 0:
-            # 1a. Compute density field directly from geometries (no dataframe dependency)
-            current_geoms = reconstruct_geometries(flat_geoms)
+            # 1a. Reconstruct Shapely geometries from the current displaced
+            # coordinates and compute the density field.
+            # from_ragged_array rebuilds all geometries in a single C-level
+            # call (~1 ms) vs the Python-loop reconstruct_geometries (~13 ms).
+            # Offsets (topology) were computed once in unpack_geometries and
+            # remain valid because morphing changes coordinate values only.
+            current_geoms = list(
+                shapely.from_ragged_array(
+                    flat_geoms.ragged_geometry_type,
+                    flat_geoms.coords,
+                    flat_geoms.ragged_offsets,
+                )
+            )
+
             rho, geom_mask = compute_density_field_from_geometries(
                 current_geoms,
                 values,
                 grid,
                 unscaled_target_density,
                 return_geometry_mask=True,
-                use_bounding_box_filter=options.use_bounding_box_filter,
-                use_parallel=_parallel,
-                n_jobs=_n_jobs,
+                use_parallel=_parallel_density,
+                n_jobs=_ndensity,
             )
             rho /= options.area_scale  # convert to display units (values / display-area)
 
@@ -402,7 +418,7 @@ def morph_geometries(
             vx, vy = velocity_computer.compute(rho)
 
             # 1d. Normalize for stability
-            vmax = np.nanmax(np.sqrt(vx**2 + vy**2))
+            vmax = max_velocity_magnitude(vx, vy)
             if vmax > 1e-12:
                 vx /= vmax
                 vy /= vmax
@@ -415,7 +431,7 @@ def morph_geometries(
             # 1d. Optional velocity modulation + re-normalize
             if options.anisotropy is not None:
                 vx, vy = options.anisotropy(vx, vy, grid, geom_mask)
-                vmax = np.nanmax(np.sqrt(vx**2 + vy**2))
+                vmax = max_velocity_magnitude(vx, vy)
                 if vmax > 1e-12:
                     vx /= vmax
                     vy /= vmax
@@ -435,30 +451,54 @@ def morph_geometries(
                 internals.add_snapshot(snapshot)
 
         # 2. Displace geometries
-        max_v = max(np.max(np.abs(vx)), np.max(np.abs(vy)), 1e-8)
+        max_v = max(max_abs_velocity(vx, vy), 1e-8)
         dt_prime = options.dt * min(grid.dx, grid.dy) / max_v
 
         # 2a. Displace geometry coordinates using the velocity field
         flat_geoms.coords = displace_coords_numba(
-            flat_geoms.coords, grid.x_coords, grid.y_coords, vx, vy, dt_prime, grid.dx, grid.dy
+            flat_geoms.coords,
+            grid.x_coords,
+            grid.y_coords,
+            vx,
+            vy,
+            dt_prime,
+            grid.dx,
+            grid.dy,
+            use_parallel=False,
         )
         flat_geoms.invalidate_cache()
 
         # 2b. Displace landmarks if provided (using same velocity field)
         if landmarks is not None and flat_landmarks_geoms is not None:
             flat_landmarks_geoms.coords = displace_coords_numba(
-                flat_landmarks_geoms.coords, grid.x_coords, grid.y_coords, vx, vy, dt_prime, grid.dx, grid.dy
+                flat_landmarks_geoms.coords,
+                grid.x_coords,
+                grid.y_coords,
+                vx,
+                vy,
+                dt_prime,
+                grid.dx,
+                grid.dy,
+                use_parallel=False,
             )
             # no need to invalidate cache, because we do not compute the areas
 
         # 2c. Displace displacement field coordinates
         if flat_coords is not None:
             flat_coords[:] = displace_coords_numba(
-                flat_coords, grid.x_coords, grid.y_coords, vx, vy, dt_prime, grid.dx, grid.dy
+                flat_coords,
+                grid.x_coords,
+                grid.y_coords,
+                vx,
+                vy,
+                dt_prime,
+                grid.dx,
+                grid.dy,
+                use_parallel=False,
             )
 
         # 3. Convergence stats
-        current_areas = flat_geoms.compute_areas(use_parallel=_parallel)
+        current_areas = flat_geoms.compute_areas(use_parallel=False)
 
         # Compute error metrics using the structured MorphErrors object
         error_metrics = compute_error_metrics(current_areas, target_areas)

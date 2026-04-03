@@ -46,7 +46,6 @@ def compute_density_field(
     grid: Grid,
     mean_density: float | None = None,
     smooth: float | None = None,
-    use_bounding_box_filter=True,
 ) -> np.ndarray:
     """
     Rasterize polygon geometries to a density grid.
@@ -71,9 +70,6 @@ def compute_density_field(
     smooth : float, optional
         Standard deviation for Gaussian smoothing. If provided, applies
         gaussian_filter with this sigma value and preserves global mean.
-    use_bounding_box_filter : bool, default=True
-        Use bounding box pre-filtering before point-in-polygon checks to speed up
-        computation.
 
     Returns
     -------
@@ -111,6 +107,9 @@ def compute_density_field(
 
     rho = np.zeros_like(grid.X)
 
+    x_1d = grid.x_coords
+    y_1d = grid.y_coords
+
     # Assign density based on polygon population / area
     for _idx, row in gdf.iterrows():
         poly = row.geometry
@@ -119,28 +118,16 @@ def compute_density_field(
 
         pop_density = row[column] / poly.area
 
-        # Create a mask of inside points
-        if use_bounding_box_filter:
-            minx, miny, maxx, maxy = poly.bounds
-            # Create bounding box mask
-            bbox_mask = (minx <= grid.X) & (maxx >= grid.X) & (miny <= grid.Y) & (maxy >= grid.Y)
+        minx, miny, maxx, maxy = poly.bounds
+        c0 = int(np.searchsorted(x_1d, minx))
+        c1 = int(np.searchsorted(x_1d, maxx, side="right"))
+        r0 = int(np.searchsorted(y_1d, miny))
+        r1 = int(np.searchsorted(y_1d, maxy, side="right"))
+        if r0 >= r1 or c0 >= c1:
+            continue
 
-            if np.any(bbox_mask):
-                # Get coordinates inside bounding box
-                x_coords = grid.X[bbox_mask]
-                y_coords = grid.Y[bbox_mask]
-
-                # Perform point-in-polygon check on filtered points
-                contains_mask = shapely.contains_xy(poly, x_coords, y_coords)
-
-                # Create full mask from bbox mask and contains_mask
-                mask = np.zeros_like(grid.X, dtype=bool)
-                mask[bbox_mask] = contains_mask
-
-                rho[mask] = pop_density
-        else:
-            mask = shapely.contains_xy(poly, grid.X, grid.Y)
-            rho[mask] = pop_density
+        contains = shapely.contains_xy(poly, grid.X[r0:r1, c0:c1], grid.Y[r0:r1, c0:c1])
+        rho[r0:r1, c0:c1][contains] = pop_density
 
     outside = rho == 0
 
@@ -167,7 +154,6 @@ def compute_density_field_from_geometries(
     smooth=None,
     return_geometry_mask=False,
     return_outside_mask=False,  # Deprecated for backward compatibility
-    use_bounding_box_filter=True,
     use_parallel=False,
     n_jobs=None,
 ):
@@ -194,9 +180,6 @@ def compute_density_field_from_geometries(
     return_outside_mask : bool, default=False
         (Deprecated) If True, return tuple (rho, outside_mask) where outside_mask is a boolean
         array indicating cells outside all geometries.
-    use_bounding_box_filter : bool, default=True
-        Use bounding box pre-filtering before point-in-polygon checks to speed up
-        computation.
     use_parallel : bool, default=False
         Whether to use parallel computation for density field calculation.
     n_jobs : int, optional
@@ -216,92 +199,73 @@ def compute_density_field_from_geometries(
     # Initialize geometry mask with -1 (outside all geometries)
     geom_mask = np.full(grid.X.shape, -1, dtype=int)
 
+    # Precompute 1D coordinate arrays for searchsorted-based bbox slicing.
+    # grid.X[i,j] = x_coords[j] and grid.Y[i,j] = y_coords[i], so row bounds
+    # map to y and column bounds map to x.
+    x_1d = grid.x_coords  # shape (sx,), sorted ascending
+    y_1d = grid.y_coords  # shape (sy,), sorted ascending
+
+    def _slice_bounds(geom):
+        """Return (r0, r1, c0, c1) integer slice bounds for geom's bbox, or None."""
+        minx, miny, maxx, maxy = geom.bounds
+        c0 = int(np.searchsorted(x_1d, minx))
+        c1 = int(np.searchsorted(x_1d, maxx, side="right"))
+        r0 = int(np.searchsorted(y_1d, miny))
+        r1 = int(np.searchsorted(y_1d, maxy, side="right"))
+        if r0 >= r1 or c0 >= c1:
+            return None
+        return r0, r1, c0, c1
+
     # Assign density and geometry indices
     if use_parallel:
+        import os
+
         from joblib import Parallel, delayed
 
-        def process_geometry(idx, geom, value):
-            if geom.is_empty:
-                return None
-
-            geom_density = value / geom.area
-
-            if use_bounding_box_filter:
-                minx, miny, maxx, maxy = geom.bounds
-                bbox_mask = (minx <= grid.X) & (maxx >= grid.X) & (miny <= grid.Y) & (maxy >= grid.Y)
-
-                if np.any(bbox_mask):
-                    x_coords = grid.X[bbox_mask]
-                    y_coords = grid.Y[bbox_mask]
-
-                    contains_mask = shapely.contains_xy(geom, x_coords, y_coords)
-
-                    mask = np.zeros(grid.X.shape, dtype=bool)
-                    mask[bbox_mask] = contains_mask
-
-                    return idx, mask, geom_density
-            else:
-                mask = shapely.contains_xy(geom, grid.X, grid.Y)
-                return idx, mask, geom_density
-
-        # Choose backend and number of jobs
-        # Use threading backend for better performance with shapely operations
-        backend = "threading"
-
-        # Auto-tune number of jobs
         if n_jobs is None or n_jobs == -1:
-            import os
+            n_jobs = os.cpu_count() or 4
 
-            cpu_count = os.cpu_count() or 4
-            n_jobs = cpu_count
+        # Phase 1: serial precomputation — bbox bounds as integers only (trivially fast).
+        precomputed = []
+        for idx, (geom, value) in enumerate(zip(geometries, column_values, strict=False)):
+            if geom.is_empty:
+                continue
+            bounds = _slice_bounds(geom)
+            if bounds is None:
+                continue
+            precomputed.append((idx, geom, value / geom.area, bounds))
 
-        # Run in parallel
-        results = Parallel(n_jobs=n_jobs, backend=backend)(
-            delayed(process_geometry)(idx, geom, value)
-            for idx, (geom, value) in enumerate(zip(geometries, column_values, strict=False))
-        )
+        # Phase 2: parallel contains_xy — each task works on a small bbox sub-array.
+        # contains_xy releases the GIL (C/GEOS), so threads run truly in parallel.
+        def run_pip(idx, geom, geom_density, bounds):
+            r0, r1, c0, c1 = bounds
+            contains = shapely.contains_xy(geom, grid.X[r0:r1, c0:c1], grid.Y[r0:r1, c0:c1])
+            return idx, geom_density, bounds, contains
 
-        # Collect results
-        for result in results:
-            if result is not None:
-                idx, mask, geom_density = result
-                rho[mask] = geom_density
-                if return_geometry_mask:
-                    geom_mask[mask] = idx
+        results = Parallel(n_jobs=n_jobs, backend="threading")(delayed(run_pip)(*entry) for entry in precomputed)
+        del precomputed
+
+        # Phase 3: serial result assembly — write into bbox sub-array slices.
+        for idx, geom_density, bounds, contains in results:
+            r0, r1, c0, c1 = bounds
+            rho[r0:r1, c0:c1][contains] = geom_density
+            if return_geometry_mask:
+                geom_mask[r0:r1, c0:c1][contains] = idx
     else:
         # Serial implementation
         for idx, (geom, value) in enumerate(zip(geometries, column_values, strict=False)):
             if geom.is_empty:
                 continue
 
+            bounds = _slice_bounds(geom)
+            if bounds is None:
+                continue
+
+            r0, r1, c0, c1 = bounds
             geom_density = value / geom.area
-
-            # Create mask of grid cells inside geometry
-            if use_bounding_box_filter:
-                minx, miny, maxx, maxy = geom.bounds
-                # Create bounding box mask
-                bbox_mask = (minx <= grid.X) & (maxx >= grid.X) & (miny <= grid.Y) & (maxy >= grid.Y)
-
-                # Only check points inside bounding box
-                if np.any(bbox_mask):
-                    # Get coordinates inside bounding box
-                    x_coords = grid.X[bbox_mask]
-                    y_coords = grid.Y[bbox_mask]
-
-                    # Perform point-in-polygon check on filtered points
-                    contains_mask = shapely.contains_xy(geom, x_coords, y_coords)
-
-                    # Create full mask from bbox mask and contains_mask
-                    mask = np.zeros(grid.X.shape, dtype=bool)
-                    mask[bbox_mask] = contains_mask
-
-                    rho[mask] = geom_density
-                    geom_mask[mask] = idx
-            else:
-                # Original behavior (no filtering)
-                mask = shapely.contains_xy(geom, grid.X, grid.Y)
-                rho[mask] = geom_density
-                geom_mask[mask] = idx
+            contains = shapely.contains_xy(geom, grid.X[r0:r1, c0:c1], grid.Y[r0:r1, c0:c1])
+            rho[r0:r1, c0:c1][contains] = geom_density
+            geom_mask[r0:r1, c0:c1][contains] = idx
 
     # Identify exterior cells (where geom_mask is still -1)
     outside = geom_mask == -1

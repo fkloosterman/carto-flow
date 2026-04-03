@@ -2,7 +2,7 @@
 Flow Cartogram
 ==============
 
-A flow-based cartogram where country areas are proportional to population.
+A flow-based cartogram where US State areas are proportional to population.
 Uses `carto_flow.flow_cartogram.morph_gdf`.
 """
 

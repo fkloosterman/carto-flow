@@ -166,22 +166,34 @@ class MorphOptions:
     show_progress: bool = True
     progress_message: str | None = None
 
-    # Rasterization optimization options
-    use_bounding_box_filter: bool = True
-    """Use bounding box pre-filtering before point-in-polygon checks.
+    # Parallel computation options
+    parallel_fft: bool | int = False
+    """Control FFTW thread count for the velocity (Poisson solve) phase.
 
-    This can significantly speed up density field computation by first filtering
-    grid cells to only those within each geometry's bounding box before
-    performing the more expensive point-in-polygon checks.
+    FFT parallelism benefits emerge at grid_size ≥ 1024 (~1.2x) and become
+    substantial at ≥ 2048 (~1.8-2x). At smaller grids, thread-launch overhead
+    exceeds the benefit. Displacement and area phases always run serially.
+
+    - False: 1 FFT thread (serial)
+    - True: max(cpu_count()-1, 1) threads
+    - N (int > 1): exactly N threads (capped at cpu_count()-1)
     """
 
-    # Parallel computation options
-    parallel: bool | int = True
-    """Control parallel computation across all subsystems.
+    parallel_density: bool | int = False
+    """Control thread count for the density rasterisation phase (ThreadPoolExecutor).
 
-    - True (default): use all available cores (max(cpu_count()-1, 1) for FFT, all cores for density/areas)
-    - False: serial everywhere (1 FFT thread, no parallel density or area computation)
-    - N (int > 1): use exactly N threads/jobs for FFT, density, and area computation
+    Whether threading helps depends on geometry count and grid size:
+
+    - Few large geometries (e.g. ~50 states, grid_size ≥ 1024): ~1.4x speedup
+    - Many small geometries (e.g. ~430 districts): threading is slower because
+      Future-submission overhead exceeds per-geometry work
+
+    See the performance benchmark in docs/explanations/performance.ipynb for
+    hardware-specific guidance.
+
+    - False: serial density loop
+    - True: all available cores (os.cpu_count())
+    - N (int > 1): exactly N worker threads
     """
 
     # Stall detection
@@ -324,7 +336,8 @@ class MorphOptions:
             "progress_message",
             "prescale_components",
             "stall_patience",
-            "parallel",
+            "parallel_fft",
+            "parallel_density",
         ]
 
         for field_name in field_names:
@@ -346,14 +359,11 @@ class MorphOptions:
         elif field_name == "grid_square":
             if not isinstance(value, bool):
                 return "grid_square must be a boolean"
-        elif field_name == "use_bounding_box_filter":
-            if not isinstance(value, bool):
-                return "use_bounding_box_filter must be a boolean"
-        elif field_name == "parallel":
+        elif field_name in ("parallel_fft", "parallel_density"):
             if not isinstance(value, (bool, int)) or (
                 isinstance(value, int) and not isinstance(value, bool) and value <= 0
             ):
-                return "parallel must be True, False, or a positive integer"
+                return f"{field_name} must be True, False, or a positive integer"
 
         # Computation parameters
         elif field_name == "dt":

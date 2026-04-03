@@ -30,13 +30,11 @@ Examples
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional, cast
+from typing import TYPE_CHECKING, Any, Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.animation import FuncAnimation
-
-from .history import CartogramInternalsSnapshot
 
 if TYPE_CHECKING:
     from geopandas import GeoDataFrame
@@ -729,12 +727,12 @@ def animate_morph_history(
             geometries.append(snap.geometry)
             variables["iteration"].append(snap.iteration)
             # Extract errors from the MorphErrors object
-            if snap.errors is not None:  # type: ignore[attr-defined]
-                variables["mean_error"].append(snap.errors.mean_log_error)  # type: ignore[attr-defined]
-                variables["max_error"].append(snap.errors.max_log_error)  # type: ignore[attr-defined]
-                variables["mean_error_pct"].append(snap.errors.mean_error_pct)  # type: ignore[attr-defined]
-                variables["max_error_pct"].append(snap.errors.max_error_pct)  # type: ignore[attr-defined]
-                snapshot_errors_pct.append(snap.errors.errors_pct)  # type: ignore[attr-defined]
+            if snap.errors is not None:
+                variables["mean_error"].append(snap.errors.mean_log_error)
+                variables["max_error"].append(snap.errors.max_log_error)
+                variables["mean_error_pct"].append(snap.errors.mean_error_pct)
+                variables["max_error_pct"].append(snap.errors.max_error_pct)
+                snapshot_errors_pct.append(snap.errors.errors_pct)
             else:
                 variables["mean_error"].append(None)
                 variables["max_error"].append(None)
@@ -1591,17 +1589,15 @@ def animate_fields(
         return hasattr(s, "vx") and s.vx is not None and hasattr(s, "vy") and s.vy is not None
 
     if show_density and show_velocity:
-        valid_snapshots = cast(
-            list[CartogramInternalsSnapshot], [s for s in snapshots if has_density(s) and has_velocity(s)]
-        )
+        valid_snapshots = [s for s in snapshots if has_density(s) and has_velocity(s)]
         if not valid_snapshots:
             raise ValueError("No snapshots with both density and velocity fields found")
     elif show_density:
-        valid_snapshots = cast(list[CartogramInternalsSnapshot], [s for s in snapshots if has_density(s)])
+        valid_snapshots = [s for s in snapshots if has_density(s)]
         if not valid_snapshots:
             raise ValueError("No density field snapshots found in history_internals")
     else:  # show_velocity only
-        valid_snapshots = cast(list[CartogramInternalsSnapshot], [s for s in snapshots if has_velocity(s)])
+        valid_snapshots = [s for s in snapshots if has_velocity(s)]
         if not valid_snapshots:
             raise ValueError("No velocity field snapshots found in history_internals")
 
@@ -1622,12 +1618,12 @@ def animate_fields(
         history_iterations = cartogram.snapshots.get_variable_history("iteration")
 
         # Extract errors from MorphErrors objects in snapshots
-        mean_errors = []
-        max_errors = []
+        mean_errors: list[float | None] = []
+        max_errors: list[float | None] = []
         for snap in cartogram.snapshots.snapshots:
-            if snap.errors is not None:  # type: ignore[attr-defined]
-                mean_errors.append(snap.errors.mean_log_error)  # type: ignore[attr-defined]
-                max_errors.append(snap.errors.max_log_error)  # type: ignore[attr-defined]
+            if snap.errors is not None:
+                mean_errors.append(snap.errors.mean_log_error)
+                max_errors.append(snap.errors.max_log_error)
             else:
                 mean_errors.append(None)
                 max_errors.append(None)
@@ -1708,9 +1704,9 @@ def animate_fields(
         Y_sub = Y[:: velocity_opts.skip, :: velocity_opts.skip]
 
         all_mags = []
-        for snap in valid_snapshots:
-            vx_sub = snap.vx[:: velocity_opts.skip, :: velocity_opts.skip]  # type: ignore[index]
-            vy_sub = snap.vy[:: velocity_opts.skip, :: velocity_opts.skip]  # type: ignore[index]
+        for int_snap in valid_snapshots:
+            vx_sub = int_snap.vx[:: velocity_opts.skip, :: velocity_opts.skip]  # type: ignore[index]
+            vy_sub = int_snap.vy[:: velocity_opts.skip, :: velocity_opts.skip]  # type: ignore[index]
             mag = np.sqrt(vx_sub**2 + vy_sub**2)
             all_mags.extend([mag.min(), mag.max()])
         mag_min, mag_max = min(all_mags), max(all_mags)

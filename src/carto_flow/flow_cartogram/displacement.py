@@ -1,103 +1,92 @@
 """
 Displacement computation utilities for flow-based cartography.
 
-This module provides functions for applying displacement fields to geometric
-objects, including polygon displacement with bilinear interpolation and
-displacement field upsampling. These utilities are essential for the iterative
-deformation process in flow-based cartogram algorithms.
-
 Functions
 ---------
-displace_coords
-    Basic coordinate displacement with bilinear interpolation.
 displace_coords_numba
-    Optimized Numba-compiled version for uniform grids.
-apply_displacement_to_polygons_vectorized
-    Vectorized polygon displacement.
-upsample_displacement
-    Upsample displacement fields to higher resolution.
-
-Examples
---------
->>> from carto_flow.flow_cartogram.displacement import displace_coords
->>> from carto_flow.flow_cartogram.grid import Grid
->>> import numpy as np
->>> grid = Grid.from_bounds((0, 0, 100, 80), size=100)
->>> coords = np.array([[10, 20], [30, 40], [50, 60]])
->>> displaced_coords = displace_coords(coords, grid, vx, vy, dt=0.1)
+    Numba-compiled coordinate displacement with bilinear interpolation on uniform grids.
+max_velocity_magnitude
+    Single-pass max(sqrt(vx²+vy²)) without temporary array allocation.
+max_abs_velocity
+    Single-pass max(|vx|, |vy|) without temporary array allocation.
 """
 
 from __future__ import annotations
 
 import numpy as np
 from numba import njit, prange
-from scipy.ndimage import gaussian_filter, zoom
-from shapely.geometry import MultiPolygon, Polygon
-
-# Import grid utilities
-from .grid import Grid
 
 # Module-level exports - Public API
 __all__ = [
-    "apply_displacement_to_polygons_vectorized",
-    "displace_coords",
     "displace_coords_numba",
-    "upsample_displacement",
+    "max_abs_velocity",
+    "max_velocity_magnitude",
 ]
 
 
-def displace_coords(coords: np.ndarray, grid: Grid, vx: np.ndarray, vy: np.ndarray, dt: float) -> np.ndarray:
-    """
-    Displace coordinates using bilinear interpolation of velocity field.
+@njit(cache=True, fastmath=True)
+def max_velocity_magnitude(vx: np.ndarray, vy: np.ndarray) -> float:
+    """Return max(sqrt(vx² + vy²)) over all grid cells in a single pass.
+
+    Equivalent to ``np.nanmax(np.sqrt(vx**2 + vy**2))`` but avoids allocating
+    the intermediate arrays, cutting memory bandwidth by ~3x at large grid sizes.
 
     Parameters
     ----------
-    coords : np.ndarray
-        Array of shape (n, 2) containing [x, y] coordinates to displace
-    grid : Grid
-        Grid information containing coordinate arrays and spatial discretization
-    vx, vy : np.ndarray
-        Velocity field components with shape (ny, nx) matching grid dimensions
-    dt : float
-        Time step for displacement integration
+    vx, vy : np.ndarray, shape (sy, sx)
+        Velocity component arrays.
 
     Returns
     -------
-    coords : np.ndarray
-        Displaced coordinates with same shape as input
+    float
+        Maximum velocity magnitude.
     """
-    # Compute grid indices
-    ix = np.clip(np.searchsorted(grid.x_coords, coords[:, 0]) - 1, 0, vx.shape[1] - 2)
-    iy = np.clip(np.searchsorted(grid.y_coords, coords[:, 1]) - 1, 0, vy.shape[0] - 2)
-
-    # Bilinear interpolation
-    tx = (coords[:, 0] - grid.x_coords[ix]) / (grid.x_coords[ix + 1] - grid.x_coords[ix])
-    ty = (coords[:, 1] - grid.y_coords[iy]) / (grid.y_coords[iy + 1] - grid.y_coords[iy])
-
-    vx_interp = (
-        (1 - tx) * (1 - ty) * vx[iy, ix]
-        + tx * (1 - ty) * vx[iy, ix + 1]
-        + (1 - tx) * ty * vx[iy + 1, ix]
-        + tx * ty * vx[iy + 1, ix + 1]
-    )
-
-    vy_interp = (
-        (1 - tx) * (1 - ty) * vy[iy, ix]
-        + tx * (1 - ty) * vy[iy, ix + 1]
-        + (1 - tx) * ty * vy[iy + 1, ix]
-        + tx * ty * vy[iy + 1, ix + 1]
-    )
-
-    # Apply displacement
-    coords[:, 0] += vx_interp * dt
-    coords[:, 1] += vy_interp * dt
-
-    return coords
+    ny = vx.shape[0]
+    nx = vx.shape[1]
+    m = 0.0
+    for i in range(ny):
+        for j in range(nx):
+            sq = vx[i, j] * vx[i, j] + vy[i, j] * vy[i, j]
+            if sq > m:
+                m = sq
+    return np.sqrt(m)
 
 
-# Option 1: Numba JIT compilation with uniform grid
+@njit(cache=True, fastmath=True)
+def max_abs_velocity(vx: np.ndarray, vy: np.ndarray) -> float:
+    """Return max(max|vx|, max|vy|) over all grid cells in a single pass.
+
+    Equivalent to ``max(np.max(np.abs(vx)), np.max(np.abs(vy)))`` but avoids
+    allocating the two intermediate abs arrays.
+
+    Parameters
+    ----------
+    vx, vy : np.ndarray, shape (sy, sx)
+        Velocity component arrays.
+
+    Returns
+    -------
+    float
+        Maximum absolute velocity in either direction.
+    """
+    ny = vx.shape[0]
+    nx = vx.shape[1]
+    mx = 0.0
+    my = 0.0
+    for i in range(ny):
+        for j in range(nx):
+            ax = abs(vx[i, j])
+            ay = abs(vy[i, j])
+            if ax > mx:
+                mx = ax
+            if ay > my:
+                my = ay
+    return max(mx, my)
+
+
+# Numba JIT compilation with uniform grid
 @njit(parallel=True, fastmath=True, cache=True)
-def displace_coords_numba(
+def _displace_coords_parallel(
     coords: np.ndarray,
     x_coords: np.ndarray,
     y_coords: np.ndarray,
@@ -159,183 +148,24 @@ def displace_coords_numba(
     return new_coords
 
 
-def apply_displacement_to_polygons_vectorized(
-    polygons: list[Polygon | MultiPolygon], vx: np.ndarray, vy: np.ndarray, grid: Grid, dt: float
-) -> list[Polygon | MultiPolygon]:
-    """
-    Apply vectorized displacement to polygon geometries using velocity field interpolation.
-
-    This function efficiently displaces multiple polygon geometries by interpolating
-    velocity values from a regular grid and applying the displacement over a time step.
-    The algorithm handles both individual polygons and multi-polygons while preserving
-    their topological structure.
-
-    The displacement process:
-    1. **Flattening**: Convert all polygons to individual Polygon objects
-    2. **Coordinate extraction**: Collect all vertex coordinates into single array
-    3. **Grid indexing**: Find grid cell indices for each coordinate using binary search
-    4. **Bilinear interpolation**: Interpolate velocity values at exact coordinate locations
-    5. **Displacement application**: Apply velocity * dt to each coordinate
-    6. **Reconstruction**: Rebuild polygons maintaining MultiPolygon structure
-
-    Parameters
-    ----------
-    polygons : List[Union[Polygon, MultiPolygon]]
-        List of shapely polygon geometries to displace. Can contain both
-        individual Polygon and MultiPolygon objects.
-    vx : np.ndarray
-        X-component of velocity field with shape (ny, nx) matching grid dimensions.
-        Represents horizontal flow velocities at grid cell centers.
-    vy : np.ndarray
-        Y-component of velocity field with shape (ny, nx) matching grid dimensions.
-        Represents vertical flow velocities at grid cell centers.
-    grid : Grid
-        Grid information containing coordinate arrays and spatial discretization.
-        Must provide x_coords, y_coords arrays for interpolation.
-    dt : float
-        Time step for displacement integration. Controls the magnitude
-        of displacement applied to polygon vertices.
-
-    Returns
-    -------
-    displaced_polygons : List[Union[Polygon, MultiPolygon]]
-        List of displaced polygon geometries with same structure as input.
-        Individual Polygons remain as Polygons, MultiPolygons are reconstructed
-        from their constituent displaced Polygon components.
-
-    Notes
-    -----
-    **Performance characteristics**:
-    - **Vectorized operations**: O(n) complexity for n polygon vertices
-    - **Binary search indexing**: O(log n) per coordinate for grid lookup
-    - **Bilinear interpolation**: Smooth velocity field approximation
-    - **Memory efficient**: Processes all coordinates in single vectorized operations
-
-    **Boundary handling**:
-    - Clips grid indices to valid range to handle edge cases
-    - Preserves polygon topology and MultiPolygon structure
-    - Maintains coordinate ordering for proper polygon reconstruction
-
-    **Use cases**:
-    - Flow-based cartography for dynamic shape deformation
-    - Physics-based animation of polygon boundaries
-    - Time integration of velocity fields on geometric objects
-
-    Examples
-    --------
-    >>> from shapely.geometry import Polygon
-    >>> import numpy as np
-    >>> from carto_flow.displacement import apply_displacement_to_polygons_vectorized
-    >>> from carto_flow.grid import Grid
-    >>>
-    >>> # Create sample polygons
-    >>> poly1 = Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])
-    >>> poly2 = Polygon([(2, 0), (3, 0), (3, 1), (2, 1)])
-    >>> polygons = [poly1, poly2]
-    >>>
-    >>> # Set up velocity field (rightward flow)
-    >>> bounds = (0, 0, 4, 2)
-    >>> grid = Grid.from_bounds(bounds, size=20)
-    >>> vx = np.ones((grid.sy, grid.sx)) * 0.1  # Rightward velocity
-    >>> vy = np.zeros((grid.sy, grid.sx))       # No vertical velocity
-    >>>
-    >>> # Apply displacement
-    >>> dt = 1.0
-    >>> displaced = apply_displacement_to_polygons_vectorized(
-    ...     polygons, vx, vy, grid, dt
-    ... )
-    >>>
-    >>> # Polygons have moved right by 0.1 units
-    >>> print(f"Original: {polygons[0]}")
-    >>> print(f"Displaced: {displaced[0]}")
-    """
-    # Flatten all polygons into a single list of Polygon objects
-    flat_polys = []
-    for poly in polygons:
-        if isinstance(poly, Polygon):
-            flat_polys.append(poly)
-        elif isinstance(poly, MultiPolygon):
-            flat_polys.extend(poly.geoms)
-        else:
-            raise TypeError("Geometry must be Polygon or MultiPolygon")
-
-    # Flatten all coordinates
-    coord_list: list[np.ndarray] = []
-    poly_sizes = []
-    for p in flat_polys:
-        c = np.array(p.exterior.coords)
-        coord_list.append(c)
-        poly_sizes.append(len(c))
-    coords = np.vstack(coord_list)
-
-    # Apply displacement using optimized Numba version
-    coords = displace_coords_numba(coords, grid.x_coords, grid.y_coords, vx, vy, dt, grid.dx, grid.dy)
-
-    # Reconstruct polygons
-    displaced_flat_polys = []
-    start = 0
-    for n in poly_sizes:
-        displaced_flat_polys.append(Polygon(coords[start : start + n]))
-        start += n
-
-    # Recombine MultiPolygons if needed
-    result_polys = []
-    idx = 0
-    for poly in polygons:
-        if isinstance(poly, Polygon):
-            result_polys.append(displaced_flat_polys[idx])
-            idx += 1
-        elif isinstance(poly, MultiPolygon):
-            mp_geoms = displaced_flat_polys[idx : idx + len(poly.geoms)]
-            result_polys.append(MultiPolygon(mp_geoms))
-            idx += len(poly.geoms)
-
-    return result_polys
+# Re-JIT the same Python function without parallel=True.
+# Numba treats prange as regular range when parallel is not set,
+# so this produces an identical but single-threaded kernel with no code duplication.
+_displace_coords_serial = njit(fastmath=True, cache=True, parallel=False)(_displace_coords_parallel.py_func)
 
 
-def upsample_displacement(
-    u_field: np.ndarray,
-    v_field: np.ndarray,
-    new_shape: tuple[int, int],
-    order: int = 3,
-    sigma_smooth: float = 0.6,
-) -> tuple[np.ndarray, np.ndarray]:
-    """
-    Upsample a displacement field (u, v) to a higher-resolution grid.
-
-    The displacement fields are defined on a regular grid, representing
-    the displacement of each grid cell center in x and y directions.
-    When moving to a higher resolution, we upsample smoothly using
-    spline interpolation and optional Gaussian smoothing to avoid
-    high-frequency artifacts.
-
-    Parameters
-    ----------
-    u_field, v_field : np.ndarray
-        2D displacement arrays (shape: [ny, nx]).
-    new_shape : tuple[int, int]
-        Target shape (ny_new, nx_new).
-    order : int, default=3
-        Spline interpolation order (0=nearest, 1=linear, 3=cubic).
-    sigma_smooth : float, default=0.6
-        Standard deviation for optional Gaussian smoothing applied after
-        interpolation (in pixels). Set to 0 to disable.
-
-    Returns
-    -------
-    (u_up, v_up) : tuple[np.ndarray, np.ndarray]
-        Upsampled displacement fields matching the target resolution.
-    """
-
-    zoom_factors = np.array(new_shape, dtype=float) / np.array(u_field.shape, dtype=float)
-
-    # Interpolate to higher resolution
-    u_up = zoom(u_field, zoom_factors, order=order, mode="reflect", grid_mode=True)
-    v_up = zoom(v_field, zoom_factors, order=order, mode="reflect", grid_mode=True)
-
-    # Optional smoothing to avoid aliasing artifacts
-    if sigma_smooth and sigma_smooth > 0:
-        u_up = gaussian_filter(u_up, sigma=sigma_smooth)
-        v_up = gaussian_filter(v_up, sigma=sigma_smooth)
-
-    return u_up, v_up
+def displace_coords_numba(
+    coords: np.ndarray,
+    x_coords: np.ndarray,
+    y_coords: np.ndarray,
+    vx: np.ndarray,
+    vy: np.ndarray,
+    dt: float,
+    dx: float,
+    dy: float,
+    use_parallel: bool = True,
+) -> np.ndarray:
+    """Dispatch to parallel or serial JIT variant based on use_parallel."""
+    if use_parallel:
+        return _displace_coords_parallel(coords, x_coords, y_coords, vx, vy, dt, dx, dy)
+    return _displace_coords_serial(coords, x_coords, y_coords, vx, vy, dt, dx, dy)
