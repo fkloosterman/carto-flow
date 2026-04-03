@@ -775,7 +775,7 @@ def plot_convergence(
 
         for snapshot in cartogram.snapshots.snapshots:
             iterations.append(snapshot.iteration)  # type: ignore[attr-defined]
-            if snapshot.errors is not None:  # type: ignore[attr-defined]
+            if snapshot.errors is not None:
                 if use_pct:
                     mean_errors.append(snapshot.errors.mean_error_pct)  # type: ignore[attr-defined]
                     max_errors.append(snapshot.errors.max_error_pct)  # type: ignore[attr-defined]
@@ -1008,7 +1008,7 @@ def plot_density_field(
     if not hasattr(snapshot, "rho") or snapshot.rho is None:
         raise ValueError("Snapshot does not contain density field (rho)")
 
-    rho = snapshot.rho  # type: ignore[attr-defined]
+    rho = snapshot.rho
     extent = [grid.xmin, grid.xmax, grid.ymin, grid.ymax]
     target_density = cartogram.target_density
     geometry_mask = getattr(snapshot, "geometry_mask", None)
@@ -1153,8 +1153,8 @@ def plot_velocity_field(
     if not hasattr(snapshot, "vy") or snapshot.vy is None:
         raise ValueError("Snapshot does not contain velocity field (vy)")
 
-    vx = snapshot.vx  # type: ignore[attr-defined]
-    vy = snapshot.vy  # type: ignore[attr-defined]
+    vx = snapshot.vx
+    vy = snapshot.vy
 
     # Create coordinate meshgrid
     X, Y = grid.X, grid.Y
@@ -1326,13 +1326,13 @@ def plot_workflow_convergence(
             max_errors = []
             for snap in cartogram.snapshots.snapshots:
                 iterations.append(snap.iteration)
-                if snap.errors is not None:  # type: ignore[attr-defined]
+                if snap.errors is not None:
                     if use_pct:
-                        mean_errors.append(snap.errors.mean_error_pct)  # type: ignore[attr-defined]
-                        max_errors.append(snap.errors.max_error_pct)  # type: ignore[attr-defined]
+                        mean_errors.append(snap.errors.mean_error_pct)
+                        max_errors.append(snap.errors.max_error_pct)
                     else:
-                        mean_errors.append(snap.errors.mean_log_error)  # type: ignore[attr-defined]
-                        max_errors.append(snap.errors.max_log_error)  # type: ignore[attr-defined]
+                        mean_errors.append(snap.errors.mean_log_error)
+                        max_errors.append(snap.errors.max_log_error)
             if iterations:
                 run_info["iterations"] = np.array(iterations) + iter_offset
                 run_info["mean_errors"] = np.array(mean_errors)
