@@ -31,6 +31,7 @@ __all__ = ["find_adjacent_pairs"]
 def find_adjacent_pairs(
     geometries: list,
     distance_tolerance: float | None = None,
+    min_shared_length: float | None = None,
 ) -> list[tuple[int, int, float]]:
     """Find adjacent geometry pairs using buffered intersection.
 
@@ -46,6 +47,11 @@ def find_adjacent_pairs(
         is shorter than this threshold are discarded. If None, auto-computed
         as 0.1% of the average geometry diameter (same heuristic as
         ``symbol_cartogram.adjacency``).
+    min_shared_length : float or None
+        Minimum shared border length (in the same units as the coordinate
+        system) for a pair to be considered adjacent. Pairs whose shared
+        border is shorter than this value are excluded even when they pass
+        the ``distance_tolerance`` check. ``None`` = no extra filter.
 
     Returns
     -------
@@ -81,6 +87,8 @@ def find_adjacent_pairs(
             # True shared border: portion of i's boundary inside j's buffer
             shared_length = boundaries[i].intersection(buffered[j]).length
             if shared_length > 0:
+                if min_shared_length is not None and shared_length < min_shared_length:
+                    continue
                 pairs.append((i, j, float(shared_length)))
 
     return pairs
