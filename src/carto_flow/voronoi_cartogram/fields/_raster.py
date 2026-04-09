@@ -720,7 +720,7 @@ class RasterField(BaseField):
         m = len(gx)
         pts32 = self.points.astype(np.float32)
         chunk = 4096
-        labels = np.empty(m, dtype=np.intp)
+        labels: np.ndarray = np.empty(m, dtype=np.intp)
 
         if self._geodesic_voronoi:
             from ..geodesic import geodesic_label_active

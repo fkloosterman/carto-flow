@@ -160,8 +160,8 @@ def geodesic_label_active(
         snap_all = snap_all[:, np.newaxis]
 
     used: set = set()
-    seed_flat = np.empty(G, dtype=np.intp)
-    seed_labels = np.empty(G, dtype=np.int32)
+    seed_flat: np.ndarray = np.empty(G, dtype=np.intp)
+    seed_labels: np.ndarray = np.empty(G, dtype=np.int32)
     n_seeds = 0
     for i in range(G):
         for j in range(k):
@@ -182,8 +182,8 @@ def geodesic_label_active(
     seed_labels = seed_labels[:n_seeds]
 
     # Convert flat pixel indices to 2-D (row, col).
-    seed_rows = (seed_flat // grid_nx).astype(np.int32)
-    seed_cols = (seed_flat % grid_nx).astype(np.int32)
+    seed_rows: np.ndarray = (seed_flat // grid_nx).astype(np.int32)
+    seed_cols: np.ndarray = (seed_flat % grid_nx).astype(np.int32)
 
     labels_2d = _bfs(active_2d, seed_rows, seed_cols, seed_labels)
 
