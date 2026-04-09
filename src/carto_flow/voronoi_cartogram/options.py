@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from typing import Any
 
 __all__ = ["TopologyRepair", "VoronoiOptions"]
 
@@ -172,7 +173,7 @@ class VoronoiOptions:
             return self.fix_topology
         return TopologyRepair(every=int(self.fix_topology))
 
-    def copy_with(self, **kwargs: object) -> VoronoiOptions:
+    def copy_with(self, **kwargs: Any) -> VoronoiOptions:
         """Return a new VoronoiOptions with specified fields overridden."""
         valid = set(self.__dataclass_fields__)
         invalid = set(kwargs) - valid

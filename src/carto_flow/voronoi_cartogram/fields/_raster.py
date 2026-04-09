@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+from typing import Any, cast
 
 import numpy as np
 from shapely.geometry import Point, Polygon
@@ -172,16 +173,18 @@ class RasterField(BaseField):
         try:
             from carto_flow.flow_cartogram.velocity import VelocityComputerFFTW
 
-            nx, ny, dx, dy = self._grid_nx, self._grid_ny, self._grid_dx, self._grid_dy
+            nx, ny = self._grid_nx, self._grid_ny
+            dx, dy = self._grid_dx, self._grid_dy
 
             class _G:
                 sx = nx
                 sy = ny
+                pass
 
             g = _G()
-            g.dx = dx
-            g.dy = dy
-            return VelocityComputerFFTW(g)
+            g.dx = dx  # type: ignore[attr-defined]
+            g.dy = dy  # type: ignore[attr-defined]
+            return VelocityComputerFFTW(g)  # type: ignore[arg-type]
         except (ImportError, Exception):
             return None
 
@@ -206,6 +209,8 @@ class RasterField(BaseField):
         def _ring_state(poly):
             return np.array(poly.exterior.coords)[:-1]
 
+        self._elastic_verts: list | None = None
+        self._elastic_current_verts: list | None = None
         if boundary.geom_type == "Polygon":
             v = _ring_state(boundary)
             self._elastic_verts = [v]
@@ -216,8 +221,6 @@ class RasterField(BaseField):
                 v = _ring_state(poly)
                 self._elastic_verts.append(v)
                 self._elastic_current_verts.append(v.copy())
-        else:
-            self._elastic_verts = None
 
     # -- Boundary deformation -----------------------------------------------
 
@@ -326,7 +329,7 @@ class RasterField(BaseField):
                 dx = self._grid_dx
                 dy = self._grid_dy
 
-            vx, vy = compute_velocity_anisotropic_rfft(rho_2d, _G())
+            vx, vy = compute_velocity_anisotropic_rfft(rho_2d, _G())  # type: ignore[arg-type]
 
         vmax = float(np.nanmax(np.sqrt(vx**2 + vy**2)))
         if vmax > 1e-12:
@@ -334,9 +337,10 @@ class RasterField(BaseField):
             vy = vy / vmax
 
         # Advect boundary vertices
+        _elastic_current_verts = cast(list, self._elastic_current_verts)
         if bdt > 0.0:
-            for i, cur_verts in enumerate(self._elastic_current_verts):
-                self._elastic_current_verts[i] = displace_coords_numba(
+            for i, cur_verts in enumerate(_elastic_current_verts):
+                _elastic_current_verts[i] = displace_coords_numba(
                     cur_verts,
                     self._grid_x_coords,
                     self._grid_y_coords,
@@ -361,8 +365,8 @@ class RasterField(BaseField):
             )
 
         # Debug state
-        orig_cat = np.vstack(self._elastic_verts)
-        cur_cat = np.vstack(self._elastic_current_verts)
+        orig_cat = np.vstack(cast(list, self._elastic_verts))
+        cur_cat = np.vstack(_elastic_current_verts)
         self._debug_area_pressure = density / target_density - 1.0
         self._debug_rho = rho_2d.copy()
         self._debug_vx = vx.copy()
@@ -374,7 +378,7 @@ class RasterField(BaseField):
         # Rebuild boundary from displaced vertices.
         # Fast path: skip make_valid + unary_union when all polygons are already
         # valid (common for small displacements with boundary_elasticity << 1).
-        new_polys = [Polygon(np.vstack([v, v[:1]])) for v in self._elastic_current_verts]
+        new_polys = [Polygon(np.vstack([v, v[:1]])) for v in _elastic_current_verts]
         if len(new_polys) == 1 and sh.is_valid(new_polys[0]):
             new_geom = new_polys[0]
         elif len(new_polys) > 1 and all(sh.is_valid(p) for p in new_polys):
@@ -643,9 +647,9 @@ class RasterField(BaseField):
                     dy = gy_active[start:end, None] - pts32[None, :, 1]
                     dist = dx * dx + dy * dy
                     if use_weights:
-                        dist = dist / w32[None, :]
+                        dist = dist / cast(np.ndarray, w32)[None, :]
                     if use_offsets:
-                        dist = dist - lam32[None, :]
+                        dist = dist - cast(np.ndarray, lam32)[None, :]
                     labels_active[start:end] = dist.argmin(axis=1).astype(np.int32)
             else:
                 pts_active = np.column_stack([gx_active.astype(np.float64), gy_active.astype(np.float64)])
@@ -746,7 +750,7 @@ class RasterField(BaseField):
                         stacklevel=3,
                     )
             else:
-                labels = _result
+                labels = np.asarray(_result, dtype=np.intp)
         elif self._weights is not None:
             if self._weight_ramp_iters > 0:
                 ramp = min(iteration / self._weight_ramp_iters, 1.0)
@@ -803,6 +807,7 @@ class RasterField(BaseField):
         area_eq_weight: float = 0.0,
         iteration: int = 0,
         intra_topology_weight: float = 0.0,
+        **_kwargs: Any,
     ) -> None:
         """Run one raster Lloyd step."""
         self._relax_raster(relaxation_factor, topology_weight, area_eq_weight, iteration, intra_topology_weight)

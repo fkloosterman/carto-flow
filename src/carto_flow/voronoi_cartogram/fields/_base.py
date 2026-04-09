@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 import numpy as np
 from scipy.spatial import Voronoi
 from shapely.geometry import Point, Polygon
@@ -69,8 +71,8 @@ class BaseField:
         # Topology spring
         if adj_pairs:
             ij = np.asarray(adj_pairs, dtype=np.intp)
-            self._adj_i = ij[:, 0]
-            self._adj_j = ij[:, 1]
+            self._adj_i: np.ndarray | None = ij[:, 0]
+            self._adj_j: np.ndarray | None = ij[:, 1]
         else:
             self._adj_i = self._adj_j = None
         # Pre-compute per-edge area-derived rest-length proportionals.
@@ -83,8 +85,8 @@ class BaseField:
         # Intra-group spring (separate pair set with its own rest-length precompute)
         if intra_adj_pairs:
             ij2 = np.asarray(intra_adj_pairs, dtype=np.intp)
-            self._intra_adj_i = ij2[:, 0]
-            self._intra_adj_j = ij2[:, 1]
+            self._intra_adj_i: np.ndarray | None = ij2[:, 0]
+            self._intra_adj_j: np.ndarray | None = ij2[:, 1]
         else:
             self._intra_adj_i = self._intra_adj_j = None
         if self._intra_adj_i is not None and self._weights is not None:
@@ -97,7 +99,7 @@ class BaseField:
             raise ValueError(f"adhesion_strength must be in [0, 1], got {adhesion_strength}")
         self._adhesion_strength = float(adhesion_strength)
         if boundary_mask is not None:
-            self._boundary_idx = np.where(np.asarray(boundary_mask, dtype=bool))[0]
+            self._boundary_idx: np.ndarray | None = np.where(np.asarray(boundary_mask, dtype=bool))[0]
             snap_geom = adhesion_boundary if adhesion_boundary is not None else boundary
             self._boundary_line = snap_geom.boundary
         else:
@@ -162,6 +164,7 @@ class BaseField:
         vecs = self.points[adj_j] - self.points[adj_i]
         dist = np.linalg.norm(vecs, axis=1, keepdims=True)
         dist = np.maximum(dist, 1e-10)
+        rest: np.ndarray | float
         if rest_raw is not None:
             alpha = float(dist.mean()) / float(rest_raw.mean())
             rest = (alpha * rest_raw)[:, None]
@@ -180,9 +183,11 @@ class BaseField:
         """Compute adjacency spring displacement (cross-group + intra-group)."""
         result = np.zeros_like(self.points)
         if self._adj_i is not None and weight != 0.0:
-            result += self._compute_spring(self._adj_i, self._adj_j, self._adj_rest_raw, weight)
+            result += self._compute_spring(self._adj_i, cast(np.ndarray, self._adj_j), self._adj_rest_raw, weight)
         if self._intra_adj_i is not None and intra_weight != 0.0:
-            result += self._compute_spring(self._intra_adj_i, self._intra_adj_j, self._intra_adj_rest_raw, intra_weight)
+            result += self._compute_spring(
+                self._intra_adj_i, cast(np.ndarray, self._intra_adj_j), self._intra_adj_rest_raw, intra_weight
+            )
         return result
 
     # ------------------------------------------------------------------

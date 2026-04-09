@@ -30,7 +30,7 @@ Examples
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 
@@ -181,16 +181,17 @@ def plot_cartogram(
         else:
             label_texts = [str(x) for x in labels]
         for idx, (cell, txt) in enumerate(zip(result.cells, label_texts, strict=False)):
+            pt: tuple | np.ndarray
             if label_location == "centroid":
                 pt = (cell.centroid.x, cell.centroid.y)
             elif label_location == "representative":
-                pt = cell.representative_point()
-                pt = (pt.x, pt.y)
+                _rp = cell.representative_point()
+                pt = (_rp.x, _rp.y)
             elif label_location == "generator":
                 pt = result.positions[idx, :]
             ax.annotate(
                 txt,
-                xy=pt,
+                xy=pt,  # type: ignore[arg-type]
                 ha="center",
                 va="center",
                 fontsize=label_fontsize,
@@ -527,7 +528,7 @@ def plot_displacement(
         c_val = out.get("c")
         cmap_val = out.pop("cmap", "viridis")
         if _is_column(c_val):
-            vals: Any = result._source_gdf[c_val].values  # type: ignore[union-attr]
+            vals: Any = result._source_gdf[c_val].values  # type: ignore[index]
             if not np.issubdtype(np.asarray(vals).dtype, np.number):
                 _, vals = np.unique(vals, return_inverse=True)
                 vals = vals.astype(float)
@@ -548,7 +549,7 @@ def plot_displacement(
 
     geo_col_values: np.ndarray | None = None
     if _is_column(geo_color_val):
-        geo_col_values = result._source_gdf[geo_color_val].values  # type: ignore[union-attr]
+        geo_col_values = result._source_gdf[geo_color_val].values
 
     # --- main data -----------------------------------------------------------
     geometries = list(result._source_gdf.geometry)
@@ -668,7 +669,7 @@ def _plot_topology_issues(
         gdf_base = gpd.GeoDataFrame(geometry=cells, crs=getattr(cartogram._source_gdf, "crs", None))
         gdf_base.plot(ax=ax, facecolor="#f0f0f0", edgecolor="#888888", linewidth=0.4, zorder=1)
 
-    legend_handles = []
+    legend_handles: list[Any] = []
 
     # --- 2. Satellite cells (contiguity) ---
     if show_contiguity and analysis.discontiguous_groups:
@@ -966,12 +967,13 @@ def plot_topology_repair(
 
     # ---- left panel: before ----
     if ax_before is not None:
+        _orig_cart = cast("VoronoiCartogram", report._original_cartogram)  # not None when ax_before is not None
         if show_base:
-            _draw_base(report._original_cartogram, ax_before)
+            _draw_base(_orig_cart, ax_before)
         if show_issues:
             _plot_topology_issues(
                 report.before,
-                report._original_cartogram,
+                _orig_cart,
                 ax_before,
                 show_base=False,
                 show_contiguity=True,

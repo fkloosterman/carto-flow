@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 from scipy.spatial import Voronoi
 from shapely.geometry import Point, Polygon
@@ -110,6 +112,7 @@ class ExactField(BaseField):
         relaxation_factor: float = 1.0,
         topology_weight: float = 0.0,
         intra_topology_weight: float = 0.0,
+        **_kwargs: Any,
     ) -> None:
         """Run one exact-Voronoi Lloyd step.
 

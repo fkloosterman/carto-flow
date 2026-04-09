@@ -138,7 +138,7 @@ def animate_voronoi_history(
     crs = getattr(getattr(result, "_source_gdf", None), "crs", None)
 
     # Artists updated each frame
-    _scatter = [None]
+    _scatter: list[Any] = [None]
     _collection_list: list = []
 
     def _draw_frame(snap: Any) -> None:
@@ -176,7 +176,7 @@ def animate_voronoi_history(
     interval_ms = max(1, round(1000 / fps))
     anim = FuncAnimation(
         fig,
-        _update,
+        _update,  # type: ignore[arg-type]
         frames=len(snapshots),
         interval=interval_ms,
         repeat=repeat,

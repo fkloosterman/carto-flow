@@ -185,10 +185,13 @@ def create_voronoi_cartogram(
             stacklevel=2,
         )
 
+    weights_arr: np.ndarray | None
     if isinstance(weights, str):
         if weights not in gdf.columns:
             raise ValueError(f"weights column {weights!r} not found in GeoDataFrame")
-        weights = gdf[weights].to_numpy(dtype=float)
+        weights_arr = gdf[weights].to_numpy(dtype=float)
+    else:
+        weights_arr = weights
 
     geometries = list(gdf.geometry)
     areas = np.array([g.area for g in geometries], dtype=np.float64)
@@ -198,7 +201,7 @@ def create_voronoi_cartogram(
     if options.prescale_components:
         from carto_flow.flow_cartogram.prescale import prescale_connected_components
 
-        w_for_prescale = weights if weights is not None else np.ones(len(geometries), dtype=np.float64)
+        w_for_prescale = weights_arr if weights_arr is not None else np.ones(len(geometries), dtype=np.float64)
         total_area = float(areas.sum())
         target_density = float(np.sum(w_for_prescale)) / total_area if total_area > 0 else 1.0
         geometries = prescale_connected_components(geometries, w_for_prescale, target_density)
@@ -210,13 +213,13 @@ def create_voronoi_cartogram(
     else:
         outer = outer_full
 
-    positions = []
+    _pos_list: list[list[float]] = []
     for g in geometries:
         c = g.centroid
         if not g.contains(c):
             c = g.representative_point()
-        positions.append([c.x, c.y])
-    positions = np.array(positions, dtype=np.float64)
+        _pos_list.append([c.x, c.y])
+    positions: np.ndarray = np.array(_pos_list, dtype=np.float64)
 
     topo = options._topology_repair()
     adj_pairs: list[tuple[int, int]] | None = None
@@ -253,7 +256,7 @@ def create_voronoi_cartogram(
         boundary_mask = np.array([bool(g.intersects(snap_ref.boundary)) for g in geometries])
 
     build_kwargs: dict = {
-        "weights": weights,
+        "weights": weights_arr,
         "adj_pairs": adj_pairs,
         "intra_adj_pairs": intra_adj_pairs,
         "boundary_mask": boundary_mask,
@@ -266,7 +269,7 @@ def create_voronoi_cartogram(
 
     _schedule = _resolve_relaxation(backend.relaxation)
     errors: list[float] = []
-    history_obj = History() if options.record_history is not False else None
+    history_obj: History | None = History() if options.record_history is not False else None
     converged = False
 
     _groups_array = list(gdf[group_by]) if group_by is not None else None
@@ -275,10 +278,9 @@ def create_voronoi_cartogram(
     for i in range(options.n_iter):
         x_prev = field.get_points()
         factor = _schedule(i)
-        backend.relax_step(field, factor, i)
+        backend.relax_step(field, factor, i)  # type: ignore[arg-type]
 
-        _run_topo = topo is not None and (i + 1) % topo.every == 0
-        if _run_topo:
+        if topo is not None and (i + 1) % topo.every == 0:
             from .contiguity import _compose_topology_permutation
 
             _cells_list = list(field.get_cells_for_contiguity())
@@ -427,7 +429,7 @@ def create_voronoi_cartogram(
     # Per-geometry signed area errors (% deviation from target)
     boundary_area = outer.area
     _n = len(cells)
-    _w = weights
+    _w = weights_arr
     _total_w = float(_w.sum()) if _w is not None else float(_n)
     target_areas = (
         _w / _total_w * boundary_area if _w is not None else np.full(_n, boundary_area / _n, dtype=np.float64)
