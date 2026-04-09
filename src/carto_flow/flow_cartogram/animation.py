@@ -61,6 +61,184 @@ __all__ = [
 PositionMapper = Callable[[float, dict[str, np.ndarray]], float]
 
 
+def _geometry_to_mpl_path(geom: Any) -> Any:
+    """Convert a shapely Polygon or MultiPolygon to a matplotlib Path."""
+    from matplotlib.path import Path as MplPath
+    from shapely.geometry import MultiPolygon
+
+    if isinstance(geom, MultiPolygon):
+        sub = [
+            MplPath.make_compound_path(
+                MplPath(np.asarray(p.exterior.coords)[:, :2]),
+                *[MplPath(np.asarray(r.coords)[:, :2]) for r in p.interiors],
+            )
+            for p in geom.geoms
+        ]
+        verts = np.concatenate([p.vertices for p in sub])
+        codes = np.concatenate([p.codes for p in sub])
+        return MplPath(verts, codes)
+    else:
+        return MplPath.make_compound_path(
+            MplPath(np.asarray(geom.exterior.coords)[:, :2]),
+            *[MplPath(np.asarray(r.coords)[:, :2]) for r in geom.interiors],
+        )
+
+
+def _extract_geometry_rings(geom: Any) -> list[np.ndarray]:
+    """Extract coordinate rings from a Polygon or MultiPolygon as numpy arrays.
+
+    Returns a flat list of arrays (exterior first, then holes) suitable for
+    passing to `_rings_to_mpl_path`. The ring structure is preserved so that
+    `Path.make_compound_path` renders filled polygons with holes correctly.
+    """
+    from shapely.geometry import MultiPolygon
+
+    if isinstance(geom, MultiPolygon):
+        rings: list[np.ndarray] = []
+        for p in geom.geoms:
+            rings.append(np.asarray(p.exterior.coords)[:, :2])
+            for r in p.interiors:
+                rings.append(np.asarray(r.coords)[:, :2])
+        return rings
+    else:
+        rings = [np.asarray(geom.exterior.coords)[:, :2]]
+        for r in geom.interiors:
+            rings.append(np.asarray(r.coords)[:, :2])
+        return rings
+
+
+def _rings_to_mpl_path(rings: list[np.ndarray]) -> Any:
+    """Build a matplotlib Path from a list of coordinate ring arrays."""
+    from matplotlib.path import Path as MplPath
+
+    return MplPath.make_compound_path(*[MplPath(ring) for ring in rings])
+
+
+def _interpolate_rings_to_path(rings_a: list[np.ndarray], rings_b: list[np.ndarray], t: float) -> Any:
+    """Interpolate between two ring lists and return a matplotlib Path.
+
+    Performs pure numpy linear interpolation — no shapely object creation.
+    Assumes rings_a and rings_b have the same structure (same ring count and
+    vertex counts), which holds when both come from the same base geometry.
+    """
+    return _rings_to_mpl_path([a * (1.0 - t) + b * t for a, b in zip(rings_a, rings_b, strict=False)])
+
+
+def _fast_precompute_paths(
+    gdfs: list,
+    keyframe_color_arrays: list,
+    actual_n_frames: int,
+    n_keyframes: int,
+    position_fn: Callable[[int], tuple[int, int, float]],
+    interpolation: str,
+) -> tuple[list, list, list]:
+    """Fast precompute for polygon-geometry animations.
+
+    Extracts coordinate rings from keyframes once, then interpolates with pure
+    numpy for each frame — no shapely Polygon construction, no GeoDataFrame copying.
+
+    Parameters
+    ----------
+    gdfs : list of GeoDataFrame
+        One GeoDataFrame per keyframe. All geometries must be Polygon/MultiPolygon.
+    keyframe_color_arrays : list of ndarray or None
+        Per-keyframe color arrays (one entry per keyframe, may be None).
+    actual_n_frames : int
+        Total number of frames to precompute.
+    n_keyframes : int
+        Number of keyframes.
+    position_fn : callable
+        ``position_fn(frame) -> (idx_a, idx_b, t)`` where idx_a/idx_b are the
+        surrounding keyframe indices and t is the interpolation fraction in [0, 1].
+    interpolation : str
+        ``"nearest"`` or ``"linear"``.
+
+    Returns
+    -------
+    precomputed_paths : list of list of Path
+        Per-frame list of matplotlib Paths (one per geometry).
+    precomputed_colors : list of ndarray or None
+        Per-frame interpolated color arrays.
+    precomputed_positions : list of (int, float)
+        Per-frame ``(idx_a, t)`` for use in title/metadata computation.
+    """
+    _keyframe_rings = [[_extract_geometry_rings(g) for g in gdf.geometry] for gdf in gdfs]
+
+    precomputed_paths: list = []
+    precomputed_colors: list = []
+    precomputed_positions: list = []
+
+    for _f in range(actual_n_frames):
+        idx_a, idx_b, _t = position_fn(_f)
+
+        if interpolation == "nearest":
+            idx = idx_a if _t < 0.5 else idx_b
+            paths = [_rings_to_mpl_path(rings) for rings in _keyframe_rings[idx]]
+            colors = keyframe_color_arrays[idx]
+            precomputed_positions.append((idx, 0.0))
+        elif _t <= 0 or idx_a == idx_b:
+            paths = [_rings_to_mpl_path(rings) for rings in _keyframe_rings[idx_a]]
+            colors = keyframe_color_arrays[idx_a]
+            precomputed_positions.append((idx_a, 0.0))
+        elif _t >= 1:
+            paths = [_rings_to_mpl_path(rings) for rings in _keyframe_rings[idx_b]]
+            colors = keyframe_color_arrays[idx_b]
+            precomputed_positions.append((idx_b, 0.0))
+        else:
+            paths = [
+                _interpolate_rings_to_path(ra, rb, _t)
+                for ra, rb in zip(_keyframe_rings[idx_a], _keyframe_rings[idx_b], strict=False)
+            ]
+            ca = keyframe_color_arrays[idx_a]
+            cb = keyframe_color_arrays[idx_b]
+            colors = (ca * (1.0 - _t) + cb * _t) if (ca is not None and cb is not None) else ca
+            precomputed_positions.append((idx_a, _t))
+
+        precomputed_paths.append(paths)
+        precomputed_colors.append(colors)
+
+    return precomputed_paths, precomputed_colors, precomputed_positions
+
+
+def _create_patch_collection(
+    frame0_paths: list,
+    frame0_colors: Any,
+    norm: Any,
+    cmap: str,
+    coll_kwargs: dict,
+    colorbar: bool,
+    colorbar_label: str | None,
+    colorbar_kwargs: dict | None,
+    ax: Any,
+    fig: Any,
+    cbar_added: list,
+) -> Any:
+    """Create a PatchCollection from the first frame and add it to the axes.
+
+    Also adds a colorbar if requested and marks ``cbar_added[0] = True``.
+    Returns the PatchCollection.
+    """
+    from matplotlib.collections import PatchCollection
+    from matplotlib.patches import PathPatch
+
+    patch_coll = PatchCollection(
+        [PathPatch(p) for p in frame0_paths],
+        norm=norm,
+        cmap=cmap,
+        **coll_kwargs,
+    )
+    if frame0_colors is not None:
+        patch_coll.set_array(np.asarray(frame0_colors).ravel())
+    ax.add_collection(patch_coll)
+    if colorbar:
+        sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+        sm.set_array([])
+        _cbar_kw = {"label": colorbar_label, **(colorbar_kwargs or {})}
+        fig.colorbar(sm, ax=ax, **_cbar_kw)
+    cbar_added[0] = True
+    return patch_coll
+
+
 class _SafeFormatDict(dict):
     """Format dict that returns NaN for unknown keys instead of raising KeyError."""
 
@@ -856,6 +1034,8 @@ def animate_morph_history(
         ax.set_xlim(xmin, xmax)
         ax.set_ylim(ymin, ymax)
         ax.set_aspect("equal")
+        if not show_axes:
+            ax.axis("off")
         return []
 
     def get_color_values_for_snapshot(idx: int) -> np.ndarray | None:
@@ -928,9 +1108,50 @@ def animate_morph_history(
 
                 return gdf, idx_before, iteration, error, colors, t
 
-    # Pre-compute all frames to avoid per-frame interpolation and GeoDataFrame copying
-    if precompute:
-        _precomputed: list = []
+    # Determine if the fast PatchCollection path can be used
+    _use_patch_coll = False
+    _patch_coll = None
+    if precompute and use_coloring and color_vmin is not None:
+        from shapely.geometry import MultiPolygon, Polygon
+
+        if all(isinstance(g, (Polygon, MultiPolygon)) for g in gdfs[0].geometry):
+            _use_patch_coll = True
+
+    # Pre-compute all frames
+    _precomputed: list = []
+    _precomputed_paths: list = []
+    _precomputed_colors: list = []
+    _precomputed_meta: list = []
+
+    if _use_patch_coll:
+
+        def _pos_fn(frame: int) -> tuple[int, int, float]:
+            progress = frame / max(1, n_frames - 1)
+            position = float(np.clip(mapper(progress, variables_arrays), 0, n_snapshots - 1))
+            idx_a = int(position)
+            return idx_a, min(idx_a + 1, n_snapshots - 1), position - idx_a
+
+        _snap_colors = [get_color_values_for_snapshot(i) for i in range(n_snapshots)]
+        _precomputed_paths, _precomputed_colors, _precomputed_meta = _fast_precompute_paths(
+            gdfs, _snap_colors, n_frames, n_snapshots, _pos_fn, interpolation
+        )
+        _norm = plt.Normalize(vmin=color_vmin, vmax=color_vmax)
+        _coll_kwargs = {k: v for k, v in kwargs.items() if k not in ("markersize", "marker")}
+        _patch_coll = _create_patch_collection(
+            _precomputed_paths[0],
+            _precomputed_colors[0],
+            _norm,
+            cmap,
+            _coll_kwargs,
+            colorbar,
+            colorbar_label,
+            colorbar_kwargs,
+            ax,
+            fig,
+            cbar_added,
+        )
+
+    elif precompute:
         for _f in range(n_frames):
             _gdf, _snap_idx, _iteration, _error, _colors, _t_val = get_frame_data(_f)
             if use_coloring and _colors is not None and color_vmin is not None:
@@ -942,41 +1163,60 @@ def animate_morph_history(
             _precomputed.append((_plot_gdf, _snap_idx, _iteration, _error, _t_val, _has_colors))
 
     def update(frame):
-        ax.clear()
-        if not show_axes:
-            ax.axis("off")
+        if _use_patch_coll:
+            if _patch_coll is None:
+                return []
+            snapshot_idx, _t_val = _precomputed_meta[frame]
+            idx_b = min(snapshot_idx + 1, n_snapshots - 1)
+            from matplotlib.collections import Collection as _Collection
 
-        if precompute:
-            plot_gdf, snapshot_idx, iteration, mean_error, _t_val, _has_colors = _precomputed[frame]
-        else:
-            _gdf, snapshot_idx, iteration, mean_error, _colors, _t_val = get_frame_data(frame)
-            if use_coloring and _colors is not None and color_vmin is not None:
-                plot_gdf = _gdf.assign(_plot_color=_colors)
-                _has_colors = True
-            else:
-                plot_gdf = _gdf
-                _has_colors = False
-
-        # Determine how to plot
-        if use_coloring and _has_colors and color_vmin is not None:
-            mappable = plot_gdf.plot(
-                ax=ax, column="_plot_color", legend=False, vmin=color_vmin, vmax=color_vmax, cmap=cmap, **kwargs
+            _Collection.set_paths(_patch_coll, _precomputed_paths[frame])
+            if _precomputed_colors[frame] is not None:
+                _patch_coll.set_array(np.asarray(_precomputed_colors[frame]).ravel())
+            iteration = float(iterations[snapshot_idx]) + _t_val * (
+                float(iterations[idx_b]) - float(iterations[snapshot_idx])
+            )
+            mean_error = (
+                float(errors[snapshot_idx]) + _t_val * (float(errors[idx_b]) - float(errors[snapshot_idx]))
+                if errors is not None
+                else None
             )
         else:
-            plot_gdf.plot(ax=ax, **kwargs)
-            mappable = None
+            ax.clear()
+            if not show_axes:
+                ax.axis("off")
 
-        # Add colorbar on first frame if requested
-        if colorbar and not cbar_added[0] and mappable is not None and color_vmin is not None:
-            sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=color_vmin, vmax=color_vmax))
-            sm.set_array([])
-            _cbar_kw = {"label": colorbar_label, **(colorbar_kwargs or {})}
-            fig.colorbar(sm, ax=ax, **_cbar_kw)
-            cbar_added[0] = True
+            if precompute:
+                plot_gdf, snapshot_idx, iteration, mean_error, _t_val, _has_colors = _precomputed[frame]
+            else:
+                _gdf, snapshot_idx, iteration, mean_error, _colors, _t_val = get_frame_data(frame)
+                if use_coloring and _colors is not None and color_vmin is not None:
+                    plot_gdf = _gdf.assign(_plot_color=_colors)
+                    _has_colors = True
+                else:
+                    plot_gdf = _gdf
+                    _has_colors = False
 
-        ax.set_xlim(xmin, xmax)
-        ax.set_ylim(ymin, ymax)
-        ax.set_aspect("equal")
+            # Determine how to plot
+            if use_coloring and _has_colors and color_vmin is not None:
+                mappable = plot_gdf.plot(
+                    ax=ax, column="_plot_color", legend=False, vmin=color_vmin, vmax=color_vmax, cmap=cmap, **kwargs
+                )
+            else:
+                plot_gdf.plot(ax=ax, **kwargs)
+                mappable = None
+
+            # Add colorbar on first frame if requested
+            if colorbar and not cbar_added[0] and mappable is not None and color_vmin is not None:
+                sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=color_vmin, vmax=color_vmax))
+                sm.set_array([])
+                _cbar_kw = {"label": colorbar_label, **(colorbar_kwargs or {})}
+                fig.colorbar(sm, ax=ax, **_cbar_kw)
+                cbar_added[0] = True
+
+            ax.set_xlim(xmin, xmax)
+            ax.set_ylim(ymin, ymax)
+            ax.set_aspect("equal")
 
         if title is None:
             error_str = ""
@@ -1007,7 +1247,7 @@ def animate_morph_history(
         else:
             ax.set_title("")
 
-        return []
+        return [_patch_coll] if _use_patch_coll else []
 
     anim = FuncAnimation(
         fig,
@@ -1042,7 +1282,7 @@ def animate_geometry_keyframes(
     colorbar_label: str | None = None,
     show_axes: bool = True,
     colorbar_kwargs: dict | None = None,
-    title: str | bool | None = None,
+    title: str | bool | Callable[..., str] | None = None,
     precompute: bool = True,
     figsize: tuple[float, float] = (10, 8),
     **kwargs: Any,
@@ -1101,7 +1341,7 @@ def animate_geometry_keyframes(
         Additional keyword arguments passed to ``fig.colorbar()``.
         Example: ``dict(shrink=0.8, pad=0.02)``.
         The ``"label"`` key overrides the auto-set label.
-    title : str, bool, or None, default=None
+    title : str, bool, callable, or None, default=None
         Controls the axes title each frame.
 
         - ``None``: auto-title ("Keyframe X/N" or transition label).
@@ -1109,6 +1349,10 @@ def animate_geometry_keyframes(
         - ``str``: format-string expanded with ``str.format_map(ctx)`` each
           frame. Available keys: ``{keyframe}`` (1-based), ``{n_keyframes}``,
           ``{t}`` (inter-keyframe fraction in [0, 1]).
+        - callable: called each frame as ``title(keyframe, n_keyframes, t)``
+          where ``keyframe`` is 1-based, ``n_keyframes`` is total keyframe
+          count, and ``t`` is the inter-keyframe fraction in [0, 1]. Must
+          return a string.
     precompute : bool, default=True
         If True, all frames are computed before the animation starts.
         Eliminates per-frame geometry interpolation and GeoDataFrame copying,
@@ -1271,6 +1515,8 @@ def animate_geometry_keyframes(
         ax.set_xlim(xmin, xmax)
         ax.set_ylim(ymin, ymax)
         ax.set_aspect("equal")
+        if not show_axes:
+            ax.axis("off")
         return []
 
     def get_color_values_for_keyframe(idx: int) -> np.ndarray | None:
@@ -1374,9 +1620,54 @@ def animate_geometry_keyframes(
     # Select the appropriate frame getter
     get_frame_data = get_frame_data_position_mapper if use_position_mapper else get_frame_data_legacy
 
-    # Pre-compute all frames to avoid per-frame interpolation and GeoDataFrame copying
-    if precompute:
-        _precomputed: list = []
+    # Determine if the fast PatchCollection path can be used.
+    # Requires: precompute, active coloring, position-mapper mode, and all-polygon geometry.
+    # When eligible, the precompute loop bypasses GeoDataFrame/shapely entirely.
+    _use_patch_coll = False
+    _patch_coll = None
+    if precompute and use_coloring and color_vmin is not None and use_position_mapper:
+        from shapely.geometry import MultiPolygon, Polygon
+
+        if all(isinstance(g, (Polygon, MultiPolygon)) for g in gdfs[0].geometry):
+            _use_patch_coll = True
+
+    # Pre-compute all frames
+    _precomputed: list = []  # used by slow path
+    _precomputed_paths: list[list] = []  # used by fast path
+    _precomputed_meta: list[tuple] = []  # used by fast path
+    _precomputed_colors: list = []  # used by fast path
+
+    if _use_patch_coll:
+        # Fast path: extract rings from each keyframe once, then interpolate
+        # with pure numpy — no shapely Polygon construction, no GeoDataFrame copying.
+        def _pos_fn(frame: int) -> tuple[int, int, float]:
+            progress = frame / max(1, actual_n_frames - 1)
+            position = float(np.clip(mapper(progress, variables_arrays), 0, n_keyframes - 1))  # type: ignore[misc]
+            idx_a = int(position)
+            return idx_a, min(idx_a + 1, n_keyframes - 1), position - idx_a
+
+        _kf_colors = [get_color_values_for_keyframe(i) for i in range(n_keyframes)]
+        _precomputed_paths, _precomputed_colors, _precomputed_meta = _fast_precompute_paths(
+            gdfs, _kf_colors, actual_n_frames, n_keyframes, _pos_fn, interpolation
+        )
+        _norm = plt.Normalize(vmin=color_vmin, vmax=color_vmax)
+        _coll_kwargs = {k: v for k, v in kwargs.items() if k not in ("markersize", "marker")}
+        _patch_coll = _create_patch_collection(
+            _precomputed_paths[0],
+            _precomputed_colors[0],
+            _norm,
+            cmap,
+            _coll_kwargs,
+            colorbar,
+            colorbar_label,
+            colorbar_kwargs,
+            ax,
+            fig,
+            cbar_added,
+        )
+
+    elif precompute:
+        # Slow path: existing GeoDataFrame-based precomputation (unchanged)
         for _f in range(actual_n_frames):
             _gdf, _keyframe_idx, _t, _colors = get_frame_data(_f)
             if use_coloring and _colors is not None and color_vmin is not None:
@@ -1391,45 +1682,58 @@ def animate_geometry_keyframes(
             _precomputed.append((_plot_gdf, _keyframe_idx, _t, _has_colors))
 
     def update(frame):
-        ax.clear()
-        if not show_axes:
-            ax.axis("off")
+        if _use_patch_coll:
+            if _patch_coll is None:
+                return []
+            keyframe_idx, t = _precomputed_meta[frame]
+            # Bypass PatchCollection.set_paths (which expects Patch objects) and
+            # call the base Collection.set_paths directly with Path objects.
+            from matplotlib.collections import Collection as _Collection
 
-        if precompute:
-            plot_gdf, keyframe_idx, t, _has_colors = _precomputed[frame]
+            _Collection.set_paths(_patch_coll, _precomputed_paths[frame])
+            _colors = _precomputed_colors[frame]
+            if _colors is not None:
+                _patch_coll.set_array(np.asarray(_colors).ravel())
         else:
-            _gdf, keyframe_idx, t, _colors = get_frame_data(frame)
-            if use_coloring and _colors is not None and color_vmin is not None:
-                plot_gdf = _gdf.assign(_plot_color=_colors)
-                _has_colors = True
+            ax.clear()
+            if not show_axes:
+                ax.axis("off")
+
+            if precompute:
+                plot_gdf, keyframe_idx, t, _has_colors = _precomputed[frame]
             else:
-                plot_gdf = _gdf
-                _has_colors = False
+                _gdf, keyframe_idx, t, _colors = get_frame_data(frame)
+                if use_coloring and _colors is not None and color_vmin is not None:
+                    plot_gdf = _gdf.assign(_plot_color=_colors)
+                    _has_colors = True
+                else:
+                    plot_gdf = _gdf
+                    _has_colors = False
 
-        # Determine how to plot
-        if use_coloring and _has_colors and color_vmin is not None:
-            mappable = plot_gdf.plot(
-                ax=ax, column="_plot_color", legend=False, vmin=color_vmin, vmax=color_vmax, cmap=cmap, **kwargs
-            )
-        elif use_coloring and column is not None and column in plot_gdf.columns and color_vmin is not None:
-            mappable = plot_gdf.plot(
-                ax=ax, column=column, legend=False, vmin=color_vmin, vmax=color_vmax, cmap=cmap, **kwargs
-            )
-        else:
-            plot_gdf.plot(ax=ax, **kwargs)
-            mappable = None
+            # Determine how to plot
+            if use_coloring and _has_colors and color_vmin is not None:
+                mappable = plot_gdf.plot(
+                    ax=ax, column="_plot_color", legend=False, vmin=color_vmin, vmax=color_vmax, cmap=cmap, **kwargs
+                )
+            elif use_coloring and column is not None and column in plot_gdf.columns and color_vmin is not None:
+                mappable = plot_gdf.plot(
+                    ax=ax, column=column, legend=False, vmin=color_vmin, vmax=color_vmax, cmap=cmap, **kwargs
+                )
+            else:
+                plot_gdf.plot(ax=ax, **kwargs)
+                mappable = None
 
-        # Add colorbar on first frame if requested
-        if colorbar and not cbar_added[0] and mappable is not None and color_vmin is not None:
-            sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=color_vmin, vmax=color_vmax))
-            sm.set_array([])
-            _cbar_kw = {"label": colorbar_label, **(colorbar_kwargs or {})}
-            fig.colorbar(sm, ax=ax, **_cbar_kw)
-            cbar_added[0] = True
+            # Add colorbar on first frame if requested
+            if colorbar and not cbar_added[0] and mappable is not None and color_vmin is not None:
+                sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=color_vmin, vmax=color_vmax))
+                sm.set_array([])
+                _cbar_kw = {"label": colorbar_label, **(colorbar_kwargs or {})}
+                fig.colorbar(sm, ax=ax, **_cbar_kw)
+                cbar_added[0] = True
 
-        ax.set_xlim(xmin, xmax)
-        ax.set_ylim(ymin, ymax)
-        ax.set_aspect("equal")
+            ax.set_xlim(xmin, xmax)
+            ax.set_ylim(ymin, ymax)
+            ax.set_aspect("equal")
 
         if title is None:
             if t == 0.0:
@@ -1440,10 +1744,12 @@ def animate_geometry_keyframes(
             _t_elapsed = frame * duration / max(1, actual_n_frames - 1)
             ctx = _SafeFormatDict(keyframe=keyframe_idx + 1, n_keyframes=n_keyframes, t=_t_elapsed, duration=duration)
             ax.set_title(title.format_map(ctx))
+        elif callable(title):
+            ax.set_title(title(keyframe_idx + 1, n_keyframes, t))
         else:
             ax.set_title("")
 
-        return []
+        return [_patch_coll] if _use_patch_coll else []
 
     anim = FuncAnimation(
         fig,
@@ -2210,6 +2516,8 @@ def animate_workflow(
         ax.set_xlim(xmin, xmax)
         ax.set_ylim(ymin, ymax)
         ax.set_aspect("equal")
+        if not show_axes:
+            ax.axis("off")
         return []
 
     def get_frame_data(frame: int) -> tuple["GeoDataFrame", int, float, np.ndarray | None]:
@@ -2266,9 +2574,67 @@ def animate_workflow(
 
                 return gdf, keyframe_idx, actual_t, colors
 
-    # Pre-compute all frames to avoid per-frame interpolation and GeoDataFrame copying
-    if precompute:
-        _precomputed: list = []
+    # Determine if the fast PatchCollection path can be used
+    _use_patch_coll = False
+    _patch_coll = None
+    if precompute and use_coloring and color_vmin is not None:
+        from shapely.geometry import MultiPolygon, Polygon
+
+        if all(isinstance(g, (Polygon, MultiPolygon)) for g in keyframes[0].geometry):
+            _use_patch_coll = True
+
+    # Pre-compute all frames
+    _precomputed: list = []
+    _precomputed_paths: list = []
+    _precomputed_colors: list = []
+    _precomputed_meta: list = []
+
+    if _use_patch_coll:
+
+        def _pos_fn(frame: int) -> tuple[int, int, float]:
+            progress = frame / max(1, n_frames - 1)
+            kf_idx = 0
+            raw_t = 0.0
+            for i in range(n_keyframes - 1):
+                pos_before = keyframe_positions[i]
+                pos_after = keyframe_positions[i + 1]
+                if progress <= pos_after:
+                    kf_idx = i
+                    raw_t = (progress - pos_before) / (pos_after - pos_before) if pos_after > pos_before else 0.0
+                    break
+            else:
+                kf_idx = n_keyframes - 1
+                raw_t = 0.0
+            hold_fraction = hold_at_keyframes / (hold_at_keyframes + transition_time) if transition_time > 0 else 1.0
+            actual_t = (
+                0.0
+                if raw_t < hold_fraction
+                else (raw_t - hold_fraction) / (1 - hold_fraction)
+                if hold_fraction < 1
+                else 0.0
+            )
+            return kf_idx, min(kf_idx + 1, n_keyframes - 1), actual_t
+
+        _precomputed_paths, _precomputed_colors, _precomputed_meta = _fast_precompute_paths(
+            keyframes, color_values, n_frames, n_keyframes, _pos_fn, interpolation
+        )
+        _norm = plt.Normalize(vmin=color_vmin, vmax=color_vmax)
+        _coll_kwargs = {k: v for k, v in kwargs.items() if k not in ("markersize", "marker")}
+        _patch_coll = _create_patch_collection(
+            _precomputed_paths[0],
+            _precomputed_colors[0],
+            _norm,
+            cmap,
+            _coll_kwargs,
+            colorbar,
+            resolved_colorbar_label,
+            colorbar_kwargs,
+            ax,
+            fig,
+            cbar_added,
+        )
+
+    elif precompute:
         for _f in range(n_frames):
             _gdf, _keyframe_idx, _t, _colors = get_frame_data(_f)
             if use_coloring and _colors is not None and color_vmin is not None:
@@ -2279,48 +2645,58 @@ def animate_workflow(
                 _has_colors = False
             _precomputed.append((_plot_gdf, _keyframe_idx, _t, _has_colors))
 
+    def _interp_kf(arr: list, i: int, frac: float) -> float:
+        if not arr:
+            return float("nan")
+        if i >= len(arr) - 1:
+            return arr[min(i, len(arr) - 1)]
+        return arr[i] * (1 - frac) + arr[i + 1] * frac
+
     def update(frame: int) -> list:
-        ax.clear()
-        if not show_axes:
-            ax.axis("off")
+        if _use_patch_coll:
+            if _patch_coll is None:
+                return []
+            keyframe_idx, t = _precomputed_meta[frame]
+            from matplotlib.collections import Collection as _Collection
 
-        if precompute:
-            plot_gdf, keyframe_idx, t, _has_colors = _precomputed[frame]
+            _Collection.set_paths(_patch_coll, _precomputed_paths[frame])
+            if _precomputed_colors[frame] is not None:
+                _patch_coll.set_array(np.asarray(_precomputed_colors[frame]).ravel())
         else:
-            _gdf, keyframe_idx, t, _colors = get_frame_data(frame)
-            if use_coloring and _colors is not None and color_vmin is not None:
-                plot_gdf = _gdf.assign(_plot_color=_colors)
-                _has_colors = True
+            ax.clear()
+            if not show_axes:
+                ax.axis("off")
+
+            if precompute:
+                plot_gdf, keyframe_idx, t, _has_colors = _precomputed[frame]
             else:
-                plot_gdf = _gdf
-                _has_colors = False
+                _gdf, keyframe_idx, t, _colors = get_frame_data(frame)
+                if use_coloring and _colors is not None and color_vmin is not None:
+                    plot_gdf = _gdf.assign(_plot_color=_colors)
+                    _has_colors = True
+                else:
+                    plot_gdf = _gdf
+                    _has_colors = False
 
-        # Determine how to plot
-        if use_coloring and _has_colors and color_vmin is not None:
-            plot_gdf.plot(
-                ax=ax, column="_plot_color", legend=False, vmin=color_vmin, vmax=color_vmax, cmap=cmap, **kwargs
-            )
-        else:
-            plot_gdf.plot(ax=ax, **kwargs)
+            # Determine how to plot
+            if use_coloring and _has_colors and color_vmin is not None:
+                plot_gdf.plot(
+                    ax=ax, column="_plot_color", legend=False, vmin=color_vmin, vmax=color_vmax, cmap=cmap, **kwargs
+                )
+            else:
+                plot_gdf.plot(ax=ax, **kwargs)
 
-        # Add colorbar on first frame if requested
-        if colorbar and not cbar_added[0] and use_coloring and color_vmin is not None:
-            sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=color_vmin, vmax=color_vmax))
-            sm.set_array([])
-            _cbar_kw = {"label": resolved_colorbar_label, **(colorbar_kwargs or {})}
-            fig.colorbar(sm, ax=ax, **_cbar_kw)
-            cbar_added[0] = True
+            # Add colorbar on first frame if requested
+            if colorbar and not cbar_added[0] and use_coloring and color_vmin is not None:
+                sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=color_vmin, vmax=color_vmax))
+                sm.set_array([])
+                _cbar_kw = {"label": resolved_colorbar_label, **(colorbar_kwargs or {})}
+                fig.colorbar(sm, ax=ax, **_cbar_kw)
+                cbar_added[0] = True
 
-        ax.set_xlim(xmin, xmax)
-        ax.set_ylim(ymin, ymax)
-        ax.set_aspect("equal")
-
-        def _interp_kf(arr: list, i: int, frac: float) -> float:
-            if not arr:
-                return float("nan")
-            if i >= len(arr) - 1:
-                return arr[min(i, len(arr) - 1)]
-            return arr[i] * (1 - frac) + arr[i + 1] * frac
+            ax.set_xlim(xmin, xmax)
+            ax.set_ylim(ymin, ymax)
+            ax.set_aspect("equal")
 
         # Build title
         if title is None:
@@ -2352,7 +2728,7 @@ def animate_workflow(
             ax.set_title(title.format_map(ctx))
         else:
             ax.set_title("")
-        return []
+        return [_patch_coll] if _use_patch_coll else []
 
     anim = FuncAnimation(
         fig,
