@@ -28,3 +28,20 @@ Combine the two modules: morph geometries with the flow cartogram, then apply pr
 
 ### [Style Symbols by Category](style-symbols-by-category.ipynb)
 Separate layout computation from styling: map data columns to colors, shapes, opacity, hatching, and labels using `plot()` keyword arguments.
+
+## Voronoi Cartogram
+
+### [Choose the Right Backend](voronoi_cartogram/choose-backend.ipynb)
+Compare `RasterBackend` (fast, pixel-based) and `ExactBackend` (exact Voronoi geometry, no weights support) with a timing and accuracy comparison and a decision table.
+
+### [Coastal and Peninsula Regions](voronoi_cartogram/coastal-regions.ipynb)
+Prevent pixel labels from crossing bays and straits by switching to `distance_mode="geodesic"` — a BFS that propagates only through active (land) pixels.
+
+### [Inspect and Improve Convergence](voronoi_cartogram/inspect-convergence.ipynb)
+Read `metrics`, plot convergence curves and area errors, visualise displacement, and tune `n_iter`, `area_cv_tol`, `prescale_components`, and the relaxation schedule.
+
+### [Analyze and Fix Topology](voronoi_cartogram/topology.ipynb)
+Detect satellite cells in grouped datasets with `plot_topology()`, and repair them post-hoc with `repair_topology()` or automatically via `TopologyRepair` in `VoronoiOptions`.
+
+### [Customize the Boundary](voronoi_cartogram/boundaries.ipynb)
+Change the outer clipping shape (`"union"`, `"bbox"`, `"circle"`, custom geometry) and choose between fixed, `AdhesiveBoundary`, and `ElasticBoundary` generator behaviour.

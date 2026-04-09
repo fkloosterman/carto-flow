@@ -13,6 +13,9 @@ Split and shrink shapes to represent proportions and multiple data dimensions wi
 ### [Symbol Cartograms](basic-symbol-cartogram.ipynb)
 Create Dorling-style symbol cartograms with physics-based circle placement and tiling layouts.
 
+### [Voronoi Cartograms](basic-voronoi-cartogram.ipynb)
+Build cartograms using Voronoi tessellation with topology-preserving deformation and contiguity repair.
+
 ## Advanced Tutorials
 
 ### [Multi-Resolution Flow Cartograms](multiresolution-flow-cartogram.ipynb)
