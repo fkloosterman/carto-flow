@@ -33,6 +33,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import geopandas
+    import pandas
 
 # US Census Bureau region definitions
 REGION_NAMES = {"1": "Northeast", "2": "Midwest", "3": "South", "4": "West"}
@@ -406,6 +407,41 @@ def load_us_census(
     return gdf
 
 
+def load_us_state_population() -> "pandas.DataFrame":
+    """Load historical US state population estimates (1900-2024).
+
+    Annual population estimates for all 50 states, DC, and Puerto Rico
+    (Puerto Rico from 2010 onward only). Pre-1970 values are rounded
+    intercensal estimates; 1970-2024 are from the US Census Bureau.
+
+    The data was compiled from:
+
+    - 1900-1969: JoshData/historical-state-population-csv (GitHub)
+    - 1970-2024: US Census Bureau population estimate programs
+
+    To update the data, run ``scripts/download_state_population.py``.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Columns: ``year``, ``state_fips``, ``state_name``, ``state_abbr``,
+        ``population``.
+
+    Examples
+    --------
+    >>> from carto_flow.data import load_us_state_population
+    >>> df = load_us_state_population()
+    >>> df.head(2)
+       year state_fips state_name state_abbr  population
+    0  1900         01    Alabama         AL     1830000
+    1  1900         02     Alaska         AK      ...
+    """
+    import pandas as pd
+
+    path = files("carto_flow.data").joinpath("us_state_population.csv")
+    return pd.read_csv(path)
+
+
 __all__ = [
     "DIVISION_NAMES",
     "REGION_DIVISIONS",
@@ -414,6 +450,7 @@ __all__ = [
     "STATE_REGIONS",
     "load_sample_cities",
     "load_us_census",
+    "load_us_state_population",
     "load_us_states",
     "load_world",
 ]
